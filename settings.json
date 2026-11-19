@@ -1,0 +1,18 @@
+{
+  "whatsapp_number": "8801403257780",
+  "admin_password": "1234",
+  "payment_methods": [
+    {
+      "name": "bKash (Send Money)",
+      "number": "01908657080"
+    },
+    {
+      "name": "Nagad (Send Money)",
+      "number": "01908657980"
+    },
+    {
+      "name": "Rocket (Send Money)",
+      "number": "01908657080"
+    }
+  ]
+}
