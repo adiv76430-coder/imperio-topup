@@ -1,15 +1,34 @@
 import os
+import json
 import sqlite3
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, '..', 'templates')
+SETTINGS_PATH = os.path.join(BASE_DIR, '..', 'settings.json')
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SQLITE_PATH = "/tmp/shop.db"
+
+def load_settings():
+    default_settings = {
+        "whatsapp_number": "88017XXXXXXXX",
+        "admin_password": "1234",
+        "payment_methods": [
+            {"name": "bKash (Send Money)", "number": "017XXXXXXXX"},
+            {"name": "Nagad (Send Money)", "number": "018XXXXXXXX"}
+        ]
+    }
+    try:
+        if os.path.exists(SETTINGS_PATH):
+            with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return default_settings
 
 def get_connection():
     if DATABASE_URL:
@@ -68,7 +87,7 @@ def init_db():
 @app.route('/')
 def home():
     init_db()
-    return render_template('index.html')
+    return render_template('index.html', shop_config=load_settings())
 
 @app.route('/api/register', methods=['POST'])
 def register():
