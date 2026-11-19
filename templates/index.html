@@ -1,748 +1,269 @@
-<!DOCTYPE html>
-<html lang="bn">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RED TEAM SHOP - Game Topup</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Poppins', sans-serif; }
-        body { background: #f4f5f7; color: #111; padding-bottom: 95px; }
-        .container { max-width: 480px; margin: 0 auto; background: #fff; min-height: 100vh; position: relative; }
+import os
+import json
+import sqlite3
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify
 
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: #fff; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #eee; }
-        .logo { font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 6px; letter-spacing: 0.5px; }
-        .btn-pill { background: #f3f4f6; border: 1px solid #ddd; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 13px; cursor: pointer; }
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.join(BASE_DIR, '..', 'templates')
+SETTINGS_PATH = os.path.join(BASE_DIR, '..', 'settings.json')
 
-        .ticker { background: #111; color: #fff; text-align: center; padding: 7px; font-size: 12px; font-weight: 600; }
+app = Flask(__name__, template_folder=TEMPLATE_DIR)
 
-        .section { padding: 14px 16px; }
-        .hero-card { background: #121212; color: #fff; padding: 20px; border-radius: 18px; margin-bottom: 12px; }
-        .badge-dark { display: inline-block; background: #2c2c2c; color: #ccc; font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 12px; margin-bottom: 8px; }
-        .hero-card h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
-        .hero-card p { font-size: 12px; color: #aaa; }
+DATABASE_URL = os.environ.get("DATABASE_URL")
+SQLITE_PATH = "/tmp/shop.db"
 
-        .wallet-card { background: #222; color: #fff; padding: 16px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 10px; }
-        .wallet-card small { font-size: 10px; color: #bbb; display: block; }
-        .wallet-card span { font-size: 13px; font-weight: 600; }
-        .btn-white { background: #fff; color: #111; border: none; padding: 9px 14px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer; white-space: nowrap; }
-
-        .section-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .cat-card { border-radius: 16px; overflow: hidden; border: 1px solid #e5e7eb; cursor: pointer; transition: 0.2s; background: #fff; }
-        .cat-card:active { transform: scale(0.97); }
-        .cat-top { background: #111; color: #fff; padding: 20px 10px; text-align: center; }
-        .cat-top .icon { font-size: 28px; display: block; margin-bottom: 6px; }
-        .cat-top span { font-size: 12px; color: #d1d5db; }
-        .cat-bottom { padding: 10px; text-align: center; font-weight: 700; font-size: 14px; }
-
-        .sub-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #eee; }
-        .back-btn { background: none; border: none; font-size: 15px; font-weight: 700; cursor: pointer; }
-        .form-card { border: 1px solid #e5e7eb; border-radius: 18px; padding: 16px; margin-bottom: 14px; background: #fff; }
-        .form-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
-        label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px; color: #333; }
-        input, select, textarea { width: 100%; padding: 12px; border: 1.5px solid #d1d5db; border-radius: 12px; font-size: 14px; margin-bottom: 12px; outline: none; background: #fff; }
-        input:focus, select:focus, textarea:focus { border-color: #111; }
-
-        .pkg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .pkg-box { border: 1.5px solid #e5e7eb; border-radius: 14px; padding: 14px 8px; text-align: center; position: relative; cursor: pointer; margin-top: 8px; }
-        .pkg-box.active { border: 2px solid #111; background: #f9fafb; }
-        .save-badge { position: absolute; top: -10px; left: 8px; background: #111; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
-        .pkg-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-        .pkg-price { font-size: 15px; font-weight: 800; }
-        .pkg-old { font-size: 12px; color: #9ca3af; text-decoration: line-through; margin-left: 4px; }
-
-        .pay-info { border: 1.5px dashed #111; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 13px; font-weight: 600; line-height: 1.8; }
-        .pay-row { display: flex; justify-content: space-between; align-items: center; }
-        .copy-mini { background: #111; color: #fff; border: none; padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; }
-
-        .submit-btn { width: 100%; background: #111; color: #fff; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
-        .btn-outline { width: 100%; background: #fff; color: #111; border: 1.5px solid #111; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 8px; }
-        .wp-btn { width: 100%; background: #16a34a; color: #fff; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; }
-
-        .order-item { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; margin-bottom: 10px; font-size: 13px; }
-        .status { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-        .Pending { background: #fef3c7; color: #92400e; }
-        .Completed, .Approved { background: #d1fae5; color: #065f46; }
-        .Rejected, .Cancelled { background: #fee2e2; color: #991b1b; }
-
-        .tab-pills { display: flex; gap: 8px; margin-bottom: 14px; }
-        .tab-pill { flex: 1; text-align: center; padding: 10px; border-radius: 12px; background: #f3f4f6; font-weight: 700; font-size: 13px; cursor: pointer; }
-        .tab-pill.active { background: #111; color: #fff; }
-
-        .bottom-nav { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); width: calc(100% - 24px); max-width: 456px; background: #fff; border: 1px solid #e5e7eb; border-radius: 30px; display: flex; justify-content: space-around; padding: 6px 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); z-index: 100; }
-        .nav-item { display: flex; flex-direction: column; align-items: center; font-size: 10px; font-weight: 600; color: #6b7280; cursor: pointer; padding: 6px 10px; border-radius: 22px; }
-        .nav-item.active { background: #111; color: #fff; }
-        .hidden { display: none !important; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <div class="header" id="mainHeader">
-        <div class="logo">⚡ RED TEAM SHOP</div>
-        <button class="btn-pill" id="headerAuthBtn" onclick="handleHeaderBtn()">Login</button>
-    </div>
-
-    <!-- HOME VIEW -->
-    <div id="homeView">
-        <div class="ticker">Topup in seconds - Available 24/7!</div>
-        <div class="section">
-            <div class="hero-card">
-                <span class="badge-dark">TOPUP CENTER</span>
-                <h1>RED TEAM SHOP</h1>
-                <p>FAST & SECURE GAME TOPUPS</p>
-            </div>
-
-            <div class="wallet-card">
-                <div>
-                    <small>WALLET & REWARDS</small>
-                    <span id="homeWalletText">লগইন করে টাকা অ্যাড করুন</span>
-                </div>
-                <button class="btn-white" id="homeWalletBtn" onclick="handleWalletBannerBtn()">Login / Sign Up</button>
-            </div>
-
-            <div class="section-title">⚡ FreeFire Topup</div>
-            <div class="grid-2">
-                <div class="cat-card" onclick="openCategory('Diamonds')">
-                    <div class="cat-top"><span class="icon">💎</span><span>BD Server</span></div>
-                    <div class="cat-bottom">Diamonds</div>
-                </div>
-                <div class="cat-card" onclick="openCategory('Level Up Pass')">
-                    <div class="cat-top"><span class="icon">🎫</span><span>Fast Delivery</span></div>
-                    <div class="cat-bottom">Level Up Pass</div>
-                </div>
-                <div class="cat-card" onclick="openCategory('Memberships')">
-                    <div class="cat-top"><span class="icon">👑</span><span>Weekly/Monthly</span></div>
-                    <div class="cat-bottom">Memberships</div>
-                </div>
-                <div class="cat-card" onclick="openCategory('FF Like Sell')">
-                    <div class="cat-top"><span class="icon">❤️</span><span>Bot Likes</span></div>
-                    <div class="cat-bottom">FF Like Sell</div>
-                </div>
-                <div class="cat-card" onclick="openCategory('Guild Emote Bot')">
-                    <div class="cat-top"><span class="icon">🤖</span><span>Guild & Emote</span></div>
-                    <div class="cat-bottom">Guild Emote Bot</div>
-                </div>
-                <div class="cat-card" onclick="openCategory('Evo Access')">
-                    <div class="cat-top"><span class="icon">🔫</span><span>Evo Gun Pass</span></div>
-                    <div class="cat-bottom">Evo Access</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- TOPUP ORDER VIEW -->
-    <div id="orderView" class="hidden">
-        <div class="sub-header">
-            <button class="back-btn" onclick="switchTab('home')">← Back</button>
-            <strong id="catTitle">Diamonds</strong>
-            <span class="btn-pill">BD</span>
-        </div>
-
-        <div class="section">
-            <div class="form-card">
-                <h3>1. Player Info</h3>
-                <label id="uidLabel">Player UID / Guild ID</label>
-                <input type="text" id="uidInput" placeholder="Free Fire UID দিন">
-                <label>In-Game Name</label>
-                <input type="text" id="ignInput" placeholder="গেমের নাম">
-            </div>
-
-            <div class="form-card">
-                <h3>2. Select Package</h3>
-                <div class="pkg-grid" id="pkgGrid"></div>
-            </div>
-
-            <div class="form-card">
-                <h3>3. Payment Method</h3>
-                <label>পেমেন্ট মাধ্যম বেছে নিন</label>
-                <select id="payMethod" onchange="toggleOrderPayment()">
-                    <option value="bKash (Send Money)">bKash (Send Money)</option>
-                    <option value="Nagad (Send Money)">Nagad (Send Money)</option>
-                    <option value="Wallet Balance">Wallet Balance (নিজের ওয়ালেট)</option>
-                </select>
-
-                <div id="orderMobilePayBox">
-                    <div class="pay-info">
-                        <div class="pay-row">
-                            <span>bKash: <b class="bkash-num"></b></span>
-                            <button class="copy-mini" onclick="copyNum('bkash')">Copy</button>
-                        </div>
-                        <div class="pay-row">
-                            <span>Nagad: <b class="nagad-num"></b></span>
-                            <button class="copy-mini" onclick="copyNum('nagad')">Copy</button>
-                        </div>
-                    </div>
-                    <label>Transaction ID (TrxID)</label>
-                    <input type="text" id="trxInput" placeholder="TrxID দিন">
-                </div>
-
-                <div id="orderWalletBox" class="pay-info hidden">
-                    আপনার বর্তমান ওয়ালেট ব্যালেন্স: <b id="orderWalletBal">৳0</b>
-                </div>
-
-                <label>WhatsApp / ফোন নম্বর</label>
-                <input type="text" id="phoneInput" placeholder="01403257780">
-                <button class="submit-btn" onclick="submitOrder()">অর্ডার কনফার্ম করুন</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- WALLET VIEW -->
-    <div id="walletView" class="hidden">
-        <div class="section">
-            <div id="walletLoggedOut" class="form-card" style="text-align:center;">
-                <h3>💰 Wallet & Add Money</h3>
-                <p style="font-size:13px; color:#555; margin-bottom:14px;">ওয়ালেটে টাকা অ্যাড করতে আগে আপনার অ্যাকাউন্টে লগইন করুন।</p>
-                <button class="submit-btn" onclick="switchTab('account')">Login / Sign Up করুন</button>
-            </div>
-
-            <div id="walletLoggedIn" class="hidden">
-                <div class="hero-card" style="text-align:center;">
-                    <span class="badge-dark">MY WALLET BALANCE</span>
-                    <h1 id="walletBalanceBig">৳0</h1>
-                    <p id="walletUserInfo"></p>
-                </div>
-
-                <div class="form-card">
-                    <h3>➕ Add Money (টাকা অ্যাড করুন)</h3>
-                    <label>কত টাকা অ্যাড করবেন? (৳)</label>
-                    <input type="number" id="addAmount" placeholder="যেমন: 100">
-                    <label>পেমেন্ট মাধ্যম</label>
-                    <select id="addMethod">
-                        <option value="bKash (Send Money)">bKash (Send Money)</option>
-                        <option value="Nagad (Send Money)">Nagad (Send Money)</option>
-                    </select>
-                    <div class="pay-info">
-                        <div class="pay-row">
-                            <span>bKash: <b class="bkash-num"></b></span>
-                            <button class="copy-mini" onclick="copyNum('bkash')">Copy</button>
-                        </div>
-                        <div class="pay-row">
-                            <span>Nagad: <b class="nagad-num"></b></span>
-                            <button class="copy-mini" onclick="copyNum('nagad')">Copy</button>
-                        </div>
-                    </div>
-                    <label>Transaction ID (TrxID)</label>
-                    <input type="text" id="addTrx" placeholder="টাকা পাঠানোর TrxID দিন">
-                    <button class="submit-btn" onclick="submitAddMoney()">Add Money রিকোয়েস্ট পাঠান</button>
-                </div>
-
-                <div class="section-title">📜 Add Money History</div>
-                <div id="myWalletHistory"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ORDERS VIEW -->
-    <div id="ordersView" class="hidden">
-        <div class="section">
-            <div class="section-title">🧾 Orders History</div>
-            <div id="ordersList">লোড হচ্ছে...</div>
-        </div>
-    </div>
-
-    <!-- SUPPORT VIEW (WhatsApp Team Chat) -->
-    <div id="supportView" class="hidden">
-        <div class="section">
-            <div class="hero-card">
-                <span class="badge-dark">24/7 TEAM SUPPORT</span>
-                <h1>Customer Support</h1>
-                <p>অর্ডার বা পেমেন্ট সংক্রান্ত যেকোনো সমস্যায় আমাদের টিমের সাথে সরাসরি কথা বলুন।</p>
-            </div>
-
-            <div class="form-card">
-                <h3>💬 WhatsApp-এ সরাসরি চ্যাট করুন</h3>
-                <label>আপনার সমস্যা লিখুন (ঐচ্ছিক)</label>
-                <textarea id="wpMessage" rows="3" placeholder="যেমন: আমার অর্ডার বা Add Money সম্পর্কে জানতে চাই..."></textarea>
-                <button class="wp-btn" onclick="openWhatsApp()">
-                    <span>💬 Chat on WhatsApp</span>
-                </button>
-                <p style="font-size:12px; color:#666; text-align:center; margin-top:10px;">
-                    WhatsApp Number: <b id="wpDisplayNum"></b>
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <!-- ACCOUNT VIEW -->
-    <div id="accountView" class="hidden">
-        <div class="section">
-            <div id="authBox" class="form-card">
-                <div class="tab-pills">
-                    <div class="tab-pill active" id="tabLoginBtn" onclick="toggleAuthMode('login')">Login</div>
-                    <div class="tab-pill" id="tabRegBtn" onclick="toggleAuthMode('register')">Sign Up</div>
-                </div>
-                <div id="regNameGroup" class="hidden">
-                    <label>আপনার নাম</label>
-                    <input type="text" id="authName" placeholder="আপনার পুরো নাম">
-                </div>
-                <label>ফোন নম্বর</label>
-                <input type="text" id="authPhone" placeholder="017XXXXXXXX">
-                <label>পাসওয়ার্ড</label>
-                <input type="password" id="authPass" placeholder="পাসওয়ার্ড দিন">
-                <button class="submit-btn" id="authSubmitBtn" onclick="submitAuth()">Login</button>
-            </div>
-
-            <div id="profileBox" class="form-card hidden">
-                <h3>👤 আমার অ্যাকাউন্ট</h3>
-                <p style="font-size:14px; margin-bottom:6px;">নাম: <b id="profName"></b></p>
-                <p style="font-size:14px; margin-bottom:6px;">ফোন: <b id="profPhone"></b></p>
-                <p style="font-size:14px; margin-bottom:14px;">ব্যালেন্স: <b id="profBal">৳0</b></p>
-                <button class="submit-btn" onclick="logoutUser()" style="background:#ef4444;">Logout</button>
-            </div>
-
-            <div class="form-card" style="text-align:center;">
-                <p style="font-size:12px; color:#666; margin-bottom:8px;">ওয়েবসাইট অ্যাডমিন প্যানেল</p>
-                <button class="btn-outline" onclick="openAdminPanel()">🔐 Admin Panel-এ ঢুকুন</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ADMIN VIEW -->
-    <div id="adminView" class="hidden">
-        <div class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <div class="section-title" style="margin:0;">🔐 Admin Panel</div>
-                <button class="btn-pill" onclick="switchTab('home')">Exit</button>
-            </div>
-            <div class="tab-pills">
-                <div class="tab-pill active" id="admOrdTab" onclick="switchAdminTab('orders')">📦 Orders</div>
-                <div class="tab-pill" id="admWalTab" onclick="switchAdminTab('wallet')">💰 Add Money</div>
-            </div>
-            <div id="adminOrdersList">লোড হচ্ছে...</div>
-            <div id="adminWalletList" class="hidden">লোড হচ্ছে...</div>
-        </div>
-    </div>
-
-    <!-- Bottom Nav -->
-    <div class="bottom-nav">
-        <div class="nav-item active" onclick="switchTab('home')" id="nav-home">🏠<span>Home</span></div>
-        <div class="nav-item" onclick="switchTab('wallet')" id="nav-wallet">💰<span>Wallet</span></div>
-        <div class="nav-item" onclick="switchTab('orders')" id="nav-orders">🧾<span>Orders</span></div>
-        <div class="nav-item" onclick="switchTab('support')" id="nav-support">🎧<span>Support</span></div>
-        <div class="nav-item" onclick="switchTab('account')" id="nav-account">👤<span>Account</span></div>
-    </div>
-</div>
-
-<script>
-    // ====== আপনার নিজের নম্বর ও পাসওয়ার্ড এখানে বসান ======
-    const SHOP_CONFIG = {
-        bkashNumber: "017XXXXXXXX",
-        nagadNumber: "018XXXXXXXX",
-        whatsappNumber: "88017XXXXXXXX", // দেশের কোড 880 সহ লিখবেন
-        adminPassword: "1234"
-    };
-    // =====================================================
-
-    const catalog = {
-        'Diamonds': [
-            { name: '25 Diamonds', price: 22, old: 25, save: 3 },
-            { name: '50 Diamonds', price: 40, old: 45, save: 5 },
-            { name: '115 Diamonds', price: 80, old: 85, save: 5 },
-            { name: '240 Diamonds', price: 160, old: 170, save: 10 },
-            { name: '355 Diamonds', price: 235, old: 250, save: 15 },
-            { name: '610 Diamonds', price: 395, old: 420, save: 25 },
-            { name: '1240 Diamonds', price: 785, old: 840, save: 55 },
-            { name: '2530 Diamonds', price: 1580, old: 1680, save: 100 }
-        ],
-        'Level Up Pass': [
-            { name: 'Level Up Pass (Full)', price: 165, old: 180, save: 15 }
-        ],
-        'Memberships': [
-            { name: 'Weekly Lite', price: 35, old: 45, save: 10 },
-            { name: 'Weekly Membership', price: 155, old: 170, save: 15 },
-            { name: 'Monthly Membership', price: 760, old: 800, save: 40 }
-        ],
-        'FF Like Sell': [
-            { name: 'Daily Like Bot - 30 Days', price: 100, old: 120, save: 20 },
-            { name: 'Daily Like Bot - 90 Days', price: 300, old: 350, save: 50 },
-            { name: 'Daily Like Bot - 365 Days', price: 1000, old: 1200, save: 200 }
-        ],
-        'Guild Emote Bot': [
-            { name: 'Guild Glory Bot - 7 Days', price: 120, old: 150, save: 30 },
-            { name: 'Guild Glory Bot - 30 Days', price: 350, old: 400, save: 50 },
-            { name: 'Emote Bot - 7 Days', price: 80, old: 100, save: 20 },
-            { name: 'Emote Bot - 30 Days', price: 250, old: 300, save: 50 },
-            { name: 'Guild + Emote Combo (30D)', price: 550, old: 650, save: 100 }
-        ],
-        'Evo Access': [
-            { name: 'Evo Access - 3 Days', price: 65, old: 80, save: 15 },
-            { name: 'Evo Access - 7 Days', price: 120, old: 140, save: 20 },
-            { name: 'Evo Access - 30 Days', price: 360, old: 420, save: 60 }
+def load_settings():
+    default_settings = {
+        "whatsapp_number": "88017XXXXXXXX",
+        "admin_password": "1234",
+        "payment_methods": [
+            {"name": "bKash (Send Money)", "number": "017XXXXXXXX"},
+            {"name": "Nagad (Send Money)", "number": "018XXXXXXXX"}
         ]
-    };
-
-    let currentUser = JSON.parse(localStorage.getItem('redteam_user') || 'null');
-    let authMode = 'login';
-    let currentCategory = 'Diamonds';
-    let selectedPackage = null;
-
-    // Initialize numbers & user state
-    document.querySelectorAll('.bkash-num').forEach(el => el.innerText = SHOP_CONFIG.bkashNumber);
-    document.querySelectorAll('.nagad-num').forEach(el => el.innerText = SHOP_CONFIG.nagadNumber);
-    document.getElementById('wpDisplayNum').innerText = '+' + SHOP_CONFIG.whatsappNumber;
-    refreshUser();
-
-    async function refreshUser() {
-        if (currentUser && currentUser.id) {
-            try {
-                const res = await fetch('/api/user/' + currentUser.id);
-                const data = await res.json();
-                if (data.success) {
-                    currentUser = data.user;
-                    localStorage.setItem('redteam_user', JSON.stringify(currentUser));
-                } else {
-                    currentUser = null;
-                    localStorage.removeItem('redteam_user');
-                }
-            } catch (e) {}
-        }
-        updateUI();
     }
+    try:
+        if os.path.exists(SETTINGS_PATH):
+            with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return default_settings
 
-    function updateUI() {
-        const hdrBtn = document.getElementById('headerAuthBtn');
-        const hwText = document.getElementById('homeWalletText');
-        const hwBtn = document.getElementById('homeWalletBtn');
+def get_connection():
+    if DATABASE_URL:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        return conn, "postgres"
+    else:
+        conn = sqlite3.connect(SQLITE_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn, "sqlite"
 
-        if (currentUser) {
-            hdrBtn.innerText = `৳${currentUser.balance}`;
-            hwText.innerText = `${currentUser.name} • ব্যালেন্স: ৳${currentUser.balance}`;
-            hwBtn.innerText = 'Add Money';
+def init_db():
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    id_col = "SERIAL PRIMARY KEY" if db_type == "postgres" else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-            document.getElementById('walletLoggedOut').classList.add('hidden');
-            document.getElementById('walletLoggedIn').classList.remove('hidden');
-            document.getElementById('walletBalanceBig').innerText = `৳${currentUser.balance}`;
-            document.getElementById('walletUserInfo').innerText = `${currentUser.name} (${currentUser.phone})`;
-            document.getElementById('orderWalletBal').innerText = `৳${currentUser.balance}`;
+    c.execute(f'''CREATE TABLE IF NOT EXISTS users (
+        id {id_col},
+        name TEXT,
+        phone TEXT UNIQUE,
+        password TEXT,
+        balance INTEGER DEFAULT 0,
+        created_at TEXT
+    )''')
 
-            document.getElementById('authBox').classList.add('hidden');
-            document.getElementById('profileBox').classList.remove('hidden');
-            document.getElementById('profName').innerText = currentUser.name;
-            document.getElementById('profPhone').innerText = currentUser.phone;
-            document.getElementById('profBal').innerText = `৳${currentUser.balance}`;
-            if (!document.getElementById('phoneInput').value) {
-                document.getElementById('phoneInput').value = currentUser.phone;
-            }
-        } else {
-            hdrBtn.innerText = 'Login';
-            hwText.innerText = 'লগইন করে টাকা অ্যাড করুন';
-            hwBtn.innerText = 'Login / Sign Up';
+    c.execute(f'''CREATE TABLE IF NOT EXISTS wallet_requests (
+        id {id_col},
+        user_id INTEGER,
+        user_name TEXT,
+        phone TEXT,
+        amount INTEGER,
+        method TEXT,
+        trx_id TEXT,
+        status TEXT DEFAULT 'Pending',
+        created_at TEXT
+    )''')
 
-            document.getElementById('walletLoggedOut').classList.remove('hidden');
-            document.getElementById('walletLoggedIn').classList.add('hidden');
-            document.getElementById('authBox').classList.remove('hidden');
-            document.getElementById('profileBox').classList.add('hidden');
-        }
-    }
+    c.execute(f'''CREATE TABLE IF NOT EXISTS orders (
+        id {id_col},
+        user_id INTEGER DEFAULT 0,
+        category TEXT,
+        package_name TEXT,
+        price INTEGER,
+        uid TEXT,
+        ign TEXT,
+        payment_method TEXT,
+        trx_id TEXT,
+        phone TEXT,
+        status TEXT DEFAULT 'Pending',
+        created_at TEXT
+    )''')
+    conn.commit()
+    conn.close()
 
-    function handleHeaderBtn() {
-        switchTab(currentUser ? 'wallet' : 'account');
-    }
+@app.route('/')
+def home():
+    init_db()
+    return render_template('index.html', shop_config=load_settings())
 
-    function handleWalletBannerBtn() {
-        switchTab(currentUser ? 'wallet' : 'account');
-    }
+@app.route('/api/register', methods=['POST'])
+def register():
+    init_db()
+    data = request.json
+    name = data.get('name', '').strip()
+    phone = data.get('phone', '').strip()
+    password = data.get('password', '').strip()
+    if not name or not phone or not password:
+        return jsonify({"success": False, "message": "সব তথ্য সঠিকভাবে দিন!"}), 400
 
-    function switchTab(tab) {
-        ['homeView', 'orderView', 'walletView', 'ordersView', 'supportView', 'accountView', 'adminView'].forEach(id => {
-            document.getElementById(id).classList.add('hidden');
-        });
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        document.getElementById('mainHeader').classList.remove('hidden');
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    c.execute(f"SELECT id FROM users WHERE phone = {p}", (phone,))
+    if c.fetchone():
+        conn.close()
+        return jsonify({"success": False, "message": "এই নম্বর দিয়ে আগেই অ্যাকাউন্ট খোলা আছে!"}), 400
 
-        if (tab === 'home') {
-            document.getElementById('homeView').classList.remove('hidden');
-            document.getElementById('nav-home').classList.add('active');
-        } else if (tab === 'wallet') {
-            document.getElementById('walletView').classList.remove('hidden');
-            document.getElementById('nav-wallet').classList.add('active');
-            refreshUser();
-            if (currentUser) loadMyWalletHistory();
-        } else if (tab === 'orders') {
-            document.getElementById('ordersView').classList.remove('hidden');
-            document.getElementById('nav-orders').classList.add('active');
-            loadOrders(false);
-        } else if (tab === 'support') {
-            document.getElementById('supportView').classList.remove('hidden');
-            document.getElementById('nav-support').classList.add('active');
-        } else if (tab === 'account') {
-            document.getElementById('accountView').classList.remove('hidden');
-            document.getElementById('nav-account').classList.add('active');
-            refreshUser();
-        }
-    }
+    now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+    c.execute(f"INSERT INTO users (name, phone, password, balance, created_at) VALUES ({p}, {p}, {p}, 0, {p})",
+              (name, phone, password, now))
+    conn.commit()
+    c.execute(f"SELECT id, name, phone, balance FROM users WHERE phone = {p}", (phone,))
+    user = dict(c.fetchone())
+    conn.close()
+    return jsonify({"success": True, "user": user})
 
-    function copyNum(type) {
-        const num = type === 'bkash' ? SHOP_CONFIG.bkashNumber : SHOP_CONFIG.nagadNumber;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(num);
-        }
-        alert(num + " কপি করা হয়েছে!");
-    }
+@app.route('/api/login', methods=['POST'])
+def login():
+    init_db()
+    data = request.json
+    phone = data.get('phone', '').strip()
+    password = data.get('password', '').strip()
 
-    function openWhatsApp() {
-        const msg = document.getElementById('wpMessage').value.trim() || "হ্যালো, RED TEAM SHOP থেকে সাহায্য দরকার।";
-        const url = `https://wa.me/${SHOP_CONFIG.whatsappNumber}?text=${encodeURIComponent(msg)}`;
-        window.open(url, '_blank');
-    }
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    c.execute(f"SELECT id, name, phone, balance FROM users WHERE phone = {p} AND password = {p}", (phone, password))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"success": False, "message": "ফোন নম্বর বা পাসওয়ার্ড ভুল!"}), 401
+    return jsonify({"success": True, "user": dict(row)})
 
-    function toggleAuthMode(mode) {
-        authMode = mode;
-        document.getElementById('tabLoginBtn').classList.toggle('active', mode === 'login');
-        document.getElementById('tabRegBtn').classList.toggle('active', mode === 'register');
-        document.getElementById('regNameGroup').classList.toggle('hidden', mode === 'login');
-        document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Login' : 'Sign Up';
-    }
+@app.route('/api/user/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    init_db()
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    c.execute(f"SELECT id, name, phone, balance FROM users WHERE id = {p}", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"success": False}), 404
+    return jsonify({"success": True, "user": dict(row)})
 
-    async function submitAuth() {
-        const name = document.getElementById('authName').value.trim();
-        const phone = document.getElementById('authPhone').value.trim();
-        const password = document.getElementById('authPass').value.trim();
+@app.route('/api/wallet/add', methods=['POST'])
+def add_wallet_request():
+    init_db()
+    data = request.json
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+    c.execute(f'''INSERT INTO wallet_requests (user_id, user_name, phone, amount, method, trx_id, created_at)
+                  VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})''',
+              (data['user_id'], data['user_name'], data['phone'], int(data['amount']), data['method'], data['trx_id'], now))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "Add Money রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যোগ করে দেবেন।"})
 
-        const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
-        const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, phone, password })
-        });
-        const data = await res.json();
-        if (data.success) {
-            currentUser = data.user;
-            localStorage.setItem('redteam_user', JSON.stringify(currentUser));
-            updateUI();
-            alert("সফলভাবে লগইন হয়েছে!");
-            switchTab('home');
-        } else {
-            alert(data.message || "সমস্যা হয়েছে!");
-        }
-    }
+@app.route('/api/wallet/requests', methods=['GET'])
+def get_wallet_requests():
+    init_db()
+    user_id = request.args.get('user_id')
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    if user_id:
+        c.execute(f"SELECT * FROM wallet_requests WHERE user_id = {p} ORDER BY id DESC", (int(user_id),))
+    else:
+        c.execute("SELECT * FROM wallet_requests ORDER BY id DESC")
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return jsonify(rows)
 
-    function logoutUser() {
-        currentUser = null;
-        localStorage.removeItem('redteam_user');
-        updateUI();
-        alert("লগআউট সম্পন্ন হয়েছে।");
-    }
+@app.route('/api/wallet/request/<int:req_id>', methods=['PATCH'])
+def update_wallet_request(req_id):
+    init_db()
+    data = request.json
+    new_status = data['status']
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    c.execute(f"SELECT * FROM wallet_requests WHERE id = {p}", (req_id,))
+    req_row = c.fetchone()
+    if req_row and req_row['status'] == 'Pending':
+        c.execute(f"UPDATE wallet_requests SET status = {p} WHERE id = {p}", (new_status, req_id))
+        if new_status == 'Approved':
+            c.execute(f"UPDATE users SET balance = balance + {p} WHERE id = {p}", (req_row['amount'], req_row['user_id']))
+        conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-    async function submitAddMoney() {
-        const amount = document.getElementById('addAmount').value.trim();
-        const method = document.getElementById('addMethod').value;
-        const trx = document.getElementById('addTrx').value.trim();
-        if (!amount || amount <= 0 || !trx) {
-            alert("টাকার পরিমাণ এবং TrxID দিন!");
-            return;
-        }
-        const res = await fetch('/api/wallet/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                user_id: currentUser.id,
-                user_name: currentUser.name,
-                phone: currentUser.phone,
-                amount, method, trx_id: trx
-            })
-        });
-        const data = await res.json();
-        if (data.success) {
-            alert(data.message);
-            document.getElementById('addAmount').value = '';
-            document.getElementById('addTrx').value = '';
-            loadMyWalletHistory();
-        }
-    }
+@app.route('/api/order', methods=['POST'])
+def create_order():
+    init_db()
+    data = request.json
+    user_id = int(data.get('user_id') or 0)
+    price = int(data['price'])
+    pay_method = data['payment_method']
 
-    async function loadMyWalletHistory() {
-        const res = await fetch('/api/wallet/requests?user_id=' + currentUser.id);
-        const rows = await res.json();
-        const box = document.getElementById('myWalletHistory');
-        if (rows.length === 0) {
-            box.innerHTML = '<p style="text-align:center; color:#777; font-size:13px;">কোনো রিকোয়েস্ট নেই।</p>';
-            return;
-        }
-        box.innerHTML = rows.map(r => `
-            <div class="order-item">
-                <div style="display:flex; justify-content:space-between;">
-                    <strong>৳${r.amount} (${r.method})</strong>
-                    <span class="status ${r.status}">${r.status}</span>
-                </div>
-                <div>TrxID: <b>${r.trx_id}</b></div>
-                <div style="color:#666; font-size:11px;">${r.created_at}</div>
-            </div>
-        `).join('');
-    }
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
 
-    function openCategory(cat) {
-        currentCategory = cat;
-        document.getElementById('homeView').classList.add('hidden');
-        document.getElementById('mainHeader').classList.add('hidden');
-        document.getElementById('orderView').classList.remove('hidden');
-        document.getElementById('catTitle').innerText = cat;
-        document.getElementById('uidLabel').innerText = cat === 'Guild Emote Bot' ? 'Guild ID / Player UID' : 'Player UID';
+    if pay_method == "Wallet Balance":
+        if not user_id:
+            conn.close()
+            return jsonify({"success": False, "message": "ওয়ালেট দিয়ে পেমেন্ট করতে আগে লগইন করুন!"}), 400
+        c.execute(f"SELECT balance FROM users WHERE id = {p}", (user_id,))
+        u = c.fetchone()
+        if not u or u['balance'] < price:
+            conn.close()
+            return jsonify({"success": False, "message": "আপনার ওয়ালেটে পর্যাপ্ত টাকা নেই! আগে Add Money করুন।"}), 400
+        c.execute(f"UPDATE users SET balance = balance - {p} WHERE id = {p}", (price, user_id))
 
-        const grid = document.getElementById('pkgGrid');
-        grid.innerHTML = '';
-        const items = catalog[cat] || [];
-        selectedPackage = items[0];
+    now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+    query = f'''INSERT INTO orders 
+        (user_id, category, package_name, price, uid, ign, payment_method, trx_id, phone, created_at)
+        VALUES ({', '.join([p]*10)})'''
+    values = (
+        user_id,
+        data['category'],
+        data['package_name'],
+        price,
+        data['uid'],
+        data.get('ign', ''),
+        pay_method,
+        data.get('trx_id', 'WALLET'),
+        data['phone'],
+        now
+    )
+    c.execute(query, values)
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "অর্ডার সফলভাবে গ্রহণ করা হয়েছে!"})
 
-        items.forEach((item, idx) => {
-            const div = document.createElement('div');
-            div.className = 'pkg-box' + (idx === 0 ? ' active' : '');
-            div.innerHTML = `
-                <span class="save-badge">Save ৳${item.save}</span>
-                <div class="pkg-name">${item.name}</div>
-                <div><span class="pkg-price">৳${item.price}</span><span class="pkg-old">৳${item.old}</span></div>
-            `;
-            div.onclick = () => {
-                document.querySelectorAll('.pkg-box').forEach(b => b.classList.remove('active'));
-                div.classList.add('active');
-                selectedPackage = item;
-            };
-            grid.appendChild(div);
-        });
-        toggleOrderPayment();
-    }
+@app.route('/api/orders', methods=['GET'])
+def get_orders():
+    init_db()
+    user_id = request.args.get('user_id')
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    if user_id:
+        c.execute(f"SELECT * FROM orders WHERE user_id = {p} ORDER BY id DESC", (int(user_id),))
+    else:
+        c.execute("SELECT * FROM orders ORDER BY id DESC")
+    rows = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return jsonify(rows)
 
-    function toggleOrderPayment() {
-        const method = document.getElementById('payMethod').value;
-        const isWallet = method === 'Wallet Balance';
-        document.getElementById('orderMobilePayBox').classList.toggle('hidden', isWallet);
-        document.getElementById('orderWalletBox').classList.toggle('hidden', !isWallet);
-        if (currentUser) document.getElementById('orderWalletBal').innerText = `৳${currentUser.balance}`;
-    }
+@app.route('/api/order/<int:order_id>', methods=['PATCH'])
+def update_order(order_id):
+    init_db()
+    data = request.json
+    conn, db_type = get_connection()
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    c.execute(f"UPDATE orders SET status = {p} WHERE id = {p}", (data['status'], order_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
-    async function submitOrder() {
-        const uid = document.getElementById('uidInput').value.trim();
-        const ign = document.getElementById('ignInput').value.trim();
-        const payMethod = document.getElementById('payMethod').value;
-        const trx = document.getElementById('trxInput').value.trim();
-        const phone = document.getElementById('phoneInput').value.trim();
-
-        if (!uid || !phone || (payMethod !== 'Wallet Balance' && !trx)) {
-            alert("দয়া করে সব প্রয়োজনীয় তথ্য পূরণ করুন!");
-            return;
-        }
-
-        const res = await fetch('/api/order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                user_id: currentUser ? currentUser.id : 0,
-                category: currentCategory,
-                package_name: selectedPackage.name,
-                price: selectedPackage.price,
-                uid, ign, payment_method: payMethod,
-                trx_id: payMethod === 'Wallet Balance' ? 'WALLET' : trx,
-                phone
-            })
-        });
-        const data = await res.json();
-        if (data.success) {
-            alert(data.message);
-            document.getElementById('trxInput').value = '';
-            refreshUser();
-            switchTab('orders');
-        } else {
-            alert(data.message);
-        }
-    }
-
-    async function loadOrders(isAdmin) {
-        const url = (!isAdmin && currentUser) ? `/api/orders?user_id=${currentUser.id}` : '/api/orders';
-        const res = await fetch(url);
-        const orders = await res.json();
-        const target = document.getElementById(isAdmin ? 'adminOrdersList' : 'ordersList');
-        if (orders.length === 0) {
-            target.innerHTML = '<p style="text-align:center; color:#777;">কোনো অর্ডার পাওয়া যায়নি।</p>';
-            return;
-        }
-        target.innerHTML = orders.map(o => `
-            <div class="order-item">
-                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-                    <strong>#${o.id} - ${o.package_name} (৳${o.price})</strong>
-                    <span class="status ${o.status}">${o.status}</span>
-                </div>
-                <div>UID: <b>${o.uid}</b> | Name: ${o.ign || 'N/A'}</div>
-                <div>Payment: <b>${o.payment_method}</b> (Trx: ${o.trx_id})</div>
-                <div>Phone: ${o.phone}</div>
-                <div style="color:#666; font-size:11px; margin-top:4px;">${o.created_at}</div>
-                ${isAdmin && o.status === 'Pending' ? `
-                    <div style="display:flex; gap:8px; margin-top:8px;">
-                        <button onclick="markOrder(${o.id}, 'Completed')" style="background:#16a34a; color:#fff; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:12px;">Complete</button>
-                        <button onclick="markOrder(${o.id}, 'Cancelled')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:12px;">Cancel</button>
-                    </div>
-                ` : ''}
-            </div>
-        `).join('');
-    }
-
-    function openAdminPanel() {
-        let pass = prompt("অ্যাডমিন পাসওয়ার্ড দিন:");
-        if (pass !== SHOP_CONFIG.adminPassword) {
-            alert("ভুল পাসওয়ার্ড!");
-            return;
-        }
-        ['homeView', 'orderView', 'walletView', 'ordersView', 'supportView', 'accountView'].forEach(id => {
-            document.getElementById(id).classList.add('hidden');
-        });
-        document.getElementById('adminView').classList.remove('hidden');
-        switchAdminTab('orders');
-    }
-
-    function switchAdminTab(tab) {
-        document.getElementById('admOrdTab').classList.toggle('active', tab === 'orders');
-        document.getElementById('admWalTab').classList.toggle('active', tab === 'wallet');
-        document.getElementById('adminOrdersList').classList.toggle('hidden', tab !== 'orders');
-        document.getElementById('adminWalletList').classList.toggle('hidden', tab !== 'wallet');
-        if (tab === 'orders') loadOrders(true);
-        else loadAdminWallet();
-    }
-
-    async function markOrder(id, status) {
-        await fetch('/api/order/' + id, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status })
-        });
-        loadOrders(true);
-    }
-
-    async function loadAdminWallet() {
-        const res = await fetch('/api/wallet/requests');
-        const rows = await res.json();
-        const box = document.getElementById('adminWalletList');
-        if (rows.length === 0) {
-            box.innerHTML = '<p style="text-align:center; color:#777;">কোনো Add Money রিকোয়েস্ট নেই।</p>';
-            return;
-        }
-        box.innerHTML = rows.map(r => `
-            <div class="order-item">
-                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-                    <strong>৳${r.amount} - ${r.user_name} (${r.phone})</strong>
-                    <span class="status ${r.status}">${r.status}</span>
-                </div>
-                <div>${r.method} | TrxID: <b>${r.trx_id}</b></div>
-                <div style="color:#666; font-size:11px; margin-top:4px;">${r.created_at}</div>
-                ${r.status === 'Pending' ? `
-                    <div style="display:flex; gap:8px; margin-top:8px;">
-                        <button onclick="markWallet(${r.id}, 'Approved')" style="background:#16a34a; color:#fff; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:12px;">Approve (+৳${r.amount})</button>
-                        <button onclick="markWallet(${r.id}, 'Rejected')" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:12px;">Reject</button>
-                    </div>
-                ` : ''}
-            </div>
-        `).join('');
-    }
-
-    async function markWallet(id, status) {
-        await fetch('/api/wallet/request/' + id, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status })
-        });
-        loadAdminWallet();
-    }
-</script>
-</body>
-</html>
+if __name__ == '__main__':
+    app.run(debug=True)
