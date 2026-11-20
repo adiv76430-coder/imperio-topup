@@ -1,4 +1,8 @@
-<!-- templates/index.html -->
+<!-- templates/index.html
+  * আপনার গোপন Admin Panel খোলার ২টি উপায় (কাস্টমাররা দেখতে পাবে না):
+    ১) ব্রাউজারে যান: red-x-shop.vercel.app/admin
+    ২) অথবা হোম পেজের ওপরের "⚡ RED TEAM SHOP" লোগোতে দ্রুত ৫ বার টাচ করুন!
+-->
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -13,7 +17,7 @@
         body { background:var(--bg); color:var(--text); padding-bottom:95px; transition:background .2s,color .2s; }
         .container { max-width:480px; margin:0 auto; background:var(--surface); min-height:100vh; position:relative; box-shadow:0 0 40px rgba(0,0,0,0.04); }
         .header { display:flex; justify-content:space-between; align-items:center; padding:12px 15px; background:var(--card); position:sticky; top:0; z-index:50; border-bottom:1px solid var(--border); }
-        .logo { font-weight:800; font-size:15.5px; display:flex; align-items:center; gap:8px; color:var(--text); }
+        .logo { font-weight:800; font-size:15.5px; display:flex; align-items:center; gap:8px; color:var(--text); cursor:pointer; user-select:none; }
         .logo-badge { background:linear-gradient(135deg,#0d7a4f,#064e3b); color:#fff; width:29px; height:29px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:14px; }
         .header-actions { display:flex; align-items:center; gap:7px; }
         .icon-btn { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); background:var(--card); color:var(--text); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px; }
@@ -135,7 +139,7 @@
 
 <div class="container">
     <div class="header" id="mainHeader">
-        <div class="logo">
+        <div class="logo" onclick="handleSecretLogoTap()">
             <div class="logo-badge">⚡</div>
             <span id="hdrShopName">{{ shop_config.shop_name }}</span>
         </div>
@@ -462,8 +466,8 @@
                     <label>আপনার নাম</label>
                     <input type="text" id="authName" placeholder="আপনার পুরো নাম">
                 </div>
-                <label>ফোন নম্বর</label>
-                <input type="text" id="authPhone" placeholder="017XXXXXXXX">
+                <label>Gmail / Email</label>
+                <input type="email" id="authEmail" placeholder="example@gmail.com">
                 <label>পাসওয়ার্ড</label>
                 <input type="password" id="authPass" placeholder="পাসওয়ার্ড দিন">
                 <button class="submit-btn" id="authSubmitBtn" onclick="submitAuth()">Login</button>
@@ -473,7 +477,7 @@
                 <div class="hero-card">
                     <span class="badge-glass">MY ACCOUNT</span>
                     <h1 id="profName">User</h1>
-                    <p id="profPhone">017XXXXXXXX</p>
+                    <p id="profPhone">example@gmail.com</p>
                 </div>
                 <div class="form-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -487,11 +491,6 @@
                     <button class="btn-outline" onclick="switchTab('support')">🎧 Customer Support</button>
                     <button class="submit-btn" onclick="logoutUser()" style="background:#ef4444; margin-top:10px;">Logout</button>
                 </div>
-            </div>
-
-            <div class="form-card" style="text-align:center;">
-                <p style="font-size:12px; color:var(--muted); margin-bottom:6px;">ওয়েবসাইট অ্যাডমিন প্যানেল</p>
-                <button class="btn-outline" onclick="openAdminPanel()">🔐 Admin Panel-এ ঢুকুন</button>
             </div>
         </div>
     </div>
@@ -533,6 +532,7 @@
     let SHOP_CONFIG = {{ shop_config | tojson }};
     let catalog = {{ catalog | tojson }};
     let liveStats = {{ live_stats | tojson }};
+    const AUTO_ADMIN = {{ auto_admin | tojson }};
 
     let currentUser = JSON.parse(localStorage.getItem('redteam_user') || 'null');
     let authMode = 'login';
@@ -544,6 +544,18 @@
     let adminPass = '';
     let adminConfigDraft = null;
     let adminCatalogDraft = null;
+    let logoTapCount = 0;
+    let logoTapTimer = null;
+
+    function handleSecretLogoTap() {
+        logoTapCount++;
+        clearTimeout(logoTapTimer);
+        logoTapTimer = setTimeout(() => { logoTapCount = 0; }, 2200);
+        if (logoTapCount >= 5) {
+            logoTapCount = 0;
+            openAdminPanel();
+        }
+    }
 
     function isGloryCat(c) { return c === 'GUILD GLORY BOT'; }
 
@@ -620,6 +632,10 @@
     renderLiveStats();
     refreshUser();
 
+    if (AUTO_ADMIN || window.location.hash === '#admin') {
+        setTimeout(() => openAdminPanel(), 250);
+    }
+
     async function refreshUser() {
         if (currentUser && currentUser.id) {
             try {
@@ -643,20 +659,23 @@
         const hwBtn = document.getElementById('homeWalletBtn');
 
         if (currentUser) {
+            const contact = currentUser.email || currentUser.phone || '';
             hdrBtn.innerText = `৳${currentUser.balance} +`;
             hwText.innerText = `${currentUser.name} • ব্যালেন্স: ৳${currentUser.balance}`;
             hwBtn.innerText = '+ Add Money';
             document.getElementById('walletLoggedOut').classList.add('hidden');
             document.getElementById('walletLoggedIn').classList.remove('hidden');
             document.getElementById('walletBalanceBig').innerText = `৳${currentUser.balance}`;
-            document.getElementById('walletUserInfo').innerText = `${currentUser.name} (${currentUser.phone})`;
+            document.getElementById('walletUserInfo').innerText = `${currentUser.name} (${contact})`;
             document.getElementById('orderWalletBalCard').innerText = `৳${currentUser.balance}.00 (Available)`;
             document.getElementById('authBox').classList.add('hidden');
             document.getElementById('profileBox').classList.remove('hidden');
             document.getElementById('profName').innerText = currentUser.name;
-            document.getElementById('profPhone').innerText = currentUser.phone;
+            document.getElementById('profPhone').innerText = contact;
             document.getElementById('profBal').innerText = `৳${currentUser.balance}`;
-            if (!document.getElementById('phoneInput').value) document.getElementById('phoneInput').value = currentUser.phone;
+            if (!document.getElementById('phoneInput').value && currentUser.phone) {
+                document.getElementById('phoneInput').value = currentUser.phone;
+            }
         } else {
             hdrBtn.innerText = 'Login';
             hwText.innerText = 'লগইন করে ওয়ালেটে টাকা অ্যাড করুন';
@@ -723,12 +742,12 @@
 
     async function submitAuth() {
         const name = document.getElementById('authName').value.trim();
-        const phone = document.getElementById('authPhone').value.trim();
+        const email = document.getElementById('authEmail').value.trim();
         const password = document.getElementById('authPass').value.trim();
         const res = await fetch(authMode === 'login' ? '/api/login' : '/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, phone, password })
+            body: JSON.stringify({ name, email, password })
         });
         const data = await res.json();
         if (data.success) {
@@ -1022,7 +1041,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: currentUser ? currentUser.id : 0,
-                    phone: currentUser ? currentUser.phone : (document.getElementById('phoneInput').value.trim() || 'Guest'),
+                    phone: currentUser ? (currentUser.email || currentUser.phone) : (document.getElementById('phoneInput').value.trim() || 'Guest'),
                     issue_type, order_id, details
                 })
             });
@@ -1092,6 +1111,7 @@
 
     function exitAdminPanel() {
         adminPass = '';
+        if (window.location.pathname === '/admin') history.replaceState(null, '', '/');
         switchTab('home');
     }
 
@@ -1114,7 +1134,7 @@
                 usersBox.innerHTML = data.users.map(u => `
                     <div class="order-item">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div><strong>#${u.id} - ${esc(u.name)}</strong><br><small>${esc(u.phone)}</small></div>
+                            <div><strong>#${u.id} - ${esc(u.name)}</strong><br><small>${esc(u.email || u.phone || '')}</small></div>
                             <strong style="color:var(--primary); font-size:15px;">৳${u.balance}</strong>
                         </div>
                         <div style="display:flex; gap:6px; margin-top:8px;">
@@ -1343,4 +1363,4 @@
     }
 </script>
 </body>
-</html>
+                        </html>
