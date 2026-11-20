@@ -199,9 +199,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 </div></div>
 
 <div id="accountView" class="hidden"><div class="section">
-<div id="authBox" class="form-card"><div class="tab-pills"><div class="tab-pill active" id="tabLoginBtn" onclick="toggleAuthMode('login')">Login</div><div class="tab-pill" id="tabRegBtn" onclick="toggleAuthMode('register')">Sign Up</div></div><div id="regNameGroup" class="hidden"><label>আপনার নাম</label><input type="text" id="authName" placeholder="আপনার পুরো নাম"></div><label>Gmail / Email</label><input type="email" id="authEmail" placeholder="example@gmail.com"><label>পাসওয়ার্ড</label><input type="password" id="authPass" placeholder="পাসওয়ার্ড দিন"><button class="submit-btn" id="authSubmitBtn" onclick="submitAuth()">Login</button></div>
+<div id="authBox" class="form-card"><div class="tab-pills"><div class="tab-pill active" id="tabLoginBtn" onclick="toggleAuthMode('login')">Login</div><div class="tab-pill" id="tabRegBtn" onclick="toggleAuthMode('register')">Sign Up</div></div><div id="regNameGroup" class="hidden"><label>আপনার নাম</label><input type="text" id="authName" placeholder="আপনার পুরো নাম"></div><label>Gmail / Email</label><input type="email" id="authEmail" placeholder="example@gmail.com"><label>পাসওয়ার্ড</label><input type="password" id="authPass" placeholder="পাসওয়ার্ড দিন"><button class="submit-btn" id="authSubmitBtn" onclick="submitAuth()">Login</button><div id="forgotLoginLinkWrap" style="text-align:right;margin-top:10px;"><button type="button" onclick="openForgotModal(document.getElementById('authEmail').value.trim())" style="background:none;border:none;color:var(--primary);font-size:12.5px;font-weight:700;cursor:pointer;">পাসওয়ার্ড ভুলে গেছেন?</button></div></div>
 <div id="profileBox" class="hidden"><div class="hero-card"><span class="badge-glass">MY ACCOUNT</span><h1 id="profName">User</h1><p id="profPhone">example@gmail.com</p></div><div class="form-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div><small style="color:var(--muted);font-weight:700;">WALLET BALANCE</small><h2 id="profBal" style="color:var(--primary);">৳0</h2></div><button class="btn-primary-sm" onclick="switchTab('wallet')">+ Add Money</button></div><button class="btn-outline" onclick="switchTab('orders')">🧾 Transaction / Order History</button><button class="btn-outline" onclick="switchTab('support')">🎧 Customer Support</button><button class="btn-outline" onclick="document.getElementById('editProfileCard').classList.toggle('hidden')">🔐 নাম / পাসওয়ার্ড পরিবর্তন</button><button class="submit-btn" onclick="logoutUser()" style="background:#ef4444;margin-top:10px;">Logout</button></div>
-<div id="editProfileCard" class="form-card hidden"><h3>🔐 প্রোফাইল আপডেট করুন</h3><label>নতুন নাম (বদলাতে চাইলে)</label><input type="text" id="editProfName" placeholder="আপনার নাম"><label>বর্তমান পাসওয়ার্ড (আবশ্যক)</label><input type="password" id="editOldPass" placeholder="বর্তমান পাসওয়ার্ড দিন"><label>নতুন পাসওয়ার্ড (বদলাতে চাইলে)</label><input type="password" id="editNewPass" placeholder="নতুন পাসওয়ার্ড দিন"><button class="submit-btn" onclick="updateProfile()">আপডেট সেভ করুন</button></div></div>
+<div id="editProfileCard" class="form-card hidden"><h3>🔐 প্রোফাইল আপডেট করুন</h3><label>নতুন নাম (বদলাতে চাইলে)</label><input type="text" id="editProfName" placeholder="আপনার নাম"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><label style="margin:0;">বর্তমান পাসওয়ার্ড (আবশ্যক)</label><button type="button" onclick="openForgotModal(currentUser ? (currentUser.email || '') : '')" style="background:none;border:none;color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;">Forgot Password? (Gmail কোড)</button></div><input type="password" id="editOldPass" placeholder="বর্তমান পাসওয়ার্ড দিন"><label>নতুন পাসওয়ার্ড (বদলাতে চাইলে)</label><input type="password" id="editNewPass" placeholder="নতুন পাসওয়ার্ড দিন"><button class="submit-btn" onclick="updateProfile()">আপডেট সেভ করুন</button></div></div>
 </div></div>
 
 <div id="adminView" class="hidden"><div class="section">
@@ -214,6 +214,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 </div></div>
 
 <div id="noticeModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeNotice()"><div class="modal-box"><h3 id="noticeModalTitle"></h3><p id="noticeModalText"></p><button class="submit-btn" onclick="closeNotice()">ঠিক আছে</button></div></div>
+
+<div id="forgotModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeForgotModal()"><div class="modal-box" style="text-align:left;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;">🔑 পাসওয়ার্ড রিসেট</h3><button type="button" onclick="closeForgotModal()" style="background:none;border:none;font-size:18px;font-weight:800;color:var(--muted);cursor:pointer;">✕</button></div><p id="forgotMsg" style="margin-bottom:10px;font-size:12.5px;color:var(--primary);font-weight:600;"></p><div id="forgotStep1"><label>আপনার অ্যাকাউন্টের Gmail</label><input type="email" id="forgotEmail" placeholder="example@gmail.com"><button type="button" class="submit-btn" id="forgotSendBtn" onclick="sendForgotOtp()">Gmail-এ কোড পাঠান</button></div><div id="forgotStep2" class="hidden"><label>Gmail-এ পাওয়া ৬ ডিজিটের কোড</label><input type="text" id="forgotOtp" placeholder="৬ ডিজিটের কোড দিন"><label>নতুন পাসওয়ার্ড</label><input type="password" id="forgotNewPass" placeholder="নতুন পাসওয়ার্ড দিন"><button type="button" class="submit-btn" id="forgotResetBtn" onclick="resetForgotPassword()">পাসওয়ার্ড পরিবর্তন করুন</button><button type="button" class="btn-outline" onclick="sendForgotOtp()">আবার কোড পাঠান</button></div></div></div>
 
 <div class="bottom-nav">
 <div class="nav-item active" onclick="switchTab('home')" id="nav-home">🏠<span>Home</span></div>
@@ -320,6 +322,7 @@ function openWhatsApp(){const m=document.getElementById('wpMessage').value.trim(
 function toggleAuthMode(mode){
 authMode=mode;document.getElementById('tabLoginBtn').classList.toggle('active',mode==='login');document.getElementById('tabRegBtn').classList.toggle('active',mode==='register');
 document.getElementById('regNameGroup').classList.toggle('hidden',mode==='login');document.getElementById('authSubmitBtn').innerText=mode==='login'?'Login':'Sign Up';
+document.getElementById('forgotLoginLinkWrap').classList.toggle('hidden',mode!=='login');
 }
 
 async function submitAuth(){
@@ -521,6 +524,8 @@ let h=`<div class="form-card"><h3>🤖 Telegram অটো বাটন (One-Tap)
 <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="cfgNoticeEnabled" ${c.notice_enabled!==false?'checked':''} style="width:auto;margin:0;"> হোম পেজ পপআপ নোটিশ চালু রাখুন</label>
 <label>পপআপ টাইটেল</label><input type="text" id="cfgNoticeTitle" value="${esc(c.notice_title||'')}"><label>পপআপ মেসেজ</label><textarea id="cfgNoticeText" rows="2">${esc(c.notice_text||'')}</textarea>
 <label>WhatsApp নম্বর (880 সহ)</label><input type="text" id="cfgWhatsapp" value="${esc(c.whatsapp_number)}"><label>আজকের অর্ডার কাউন্ট বাড়াতে চাইলে (+ Offset দিন)</label><input type="number" id="cfgOffset" value="${c.today_count_offset||0}">
+<label>OTP পাঠানোর Gmail (SMTP Email)</label><input type="email" id="cfgSmtpEmail" value="${esc(c.smtp_email||'')}" placeholder="yourshop@gmail.com">
+<label>Gmail App Password (১৬ অক্ষরের কোড)</label><input type="password" id="cfgSmtpPass" value="${esc(c.smtp_app_password||'')}" placeholder="xxxx xxxx xxxx xxxx">
 <label>পেমেন্ট নম্বরসমূহ:</label><div>${pms.map((m,i)=>`<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:5px;margin-bottom:6px;"><input type="text" value="${esc(m.name)}" onchange="adminConfigDraft.payment_methods[${i}].name=this.value" style="margin:0;padding:8px;"><input type="text" value="${esc(m.number)}" onchange="adminConfigDraft.payment_methods[${i}].number=this.value" style="margin:0;padding:8px;"><button onclick="adminConfigDraft.payment_methods.splice(${i},1);renderAdminSettings([])" style="background:#ef4444;color:#fff;border:none;padding:0 10px;border-radius:8px;">✕</button></div>`).join('')}</div>
 <button type="button" class="btn-outline" style="margin-bottom:10px;" onclick="adminConfigDraft.payment_methods.push({name:'New Method',number:'017XXXXXXXX'});renderAdminSettings([])">+ পেমেন্ট মাধ্যম যোগ করুন</button>
 <button class="submit-btn" onclick="saveAdminConfig()">💾 সেটিংস সেভ করুন</button></div>
@@ -538,6 +543,8 @@ adminConfigDraft.notice_title=document.getElementById('cfgNoticeTitle').value.tr
 adminConfigDraft.notice_text=document.getElementById('cfgNoticeText').value.trim();
 adminConfigDraft.whatsapp_number=document.getElementById('cfgWhatsapp').value.trim();
 adminConfigDraft.today_count_offset=parseInt(document.getElementById('cfgOffset').value||'0',10);
+adminConfigDraft.smtp_email=document.getElementById('cfgSmtpEmail').value.trim();
+adminConfigDraft.smtp_app_password=document.getElementById('cfgSmtpPass').value.trim();
 const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Password':adminPass},body:JSON.stringify({config:adminConfigDraft})});
 const d=await r.json();SHOP_CONFIG={...SHOP_CONFIG,...adminConfigDraft};initSettingsUI();refreshLiveStats();alert(d.message||"সেটিংস সেভ হয়েছে!");
 }
@@ -547,6 +554,55 @@ const reply=prompt("কাস্টমারের জন্য রিপ্ল�
 await fetch('/api/admin/reports',{method:'PATCH',headers:{'Content-Type':'application/json','X-Admin-Password':adminPass},body:JSON.stringify({id,status:'Resolved',admin_reply:reply})});
 loadAdminSettingsAndCatalog();
 }
+
+function openForgotModal(prefillEmail){
+document.getElementById('forgotEmail').value=prefillEmail||'';
+document.getElementById('forgotOtp').value='';
+document.getElementById('forgotNewPass').value='';
+document.getElementById('forgotMsg').innerText='আপনার Gmail-এ ৬ ডিজিটের ভেরিফিকেশন কোড পাঠানো হবে।';
+document.getElementById('forgotStep1').classList.remove('hidden');
+document.getElementById('forgotStep2').classList.add('hidden');
+document.getElementById('forgotModal').classList.remove('hidden');
+}
+
+function closeForgotModal(){
+document.getElementById('forgotModal').classList.add('hidden');
+}
+
+async function sendForgotOtp(){
+const email=document.getElementById('forgotEmail').value.trim();
+if(!email)return alert('আপনার Gmail লিখুন!');
+const btn=document.getElementById('forgotSendBtn');btn.disabled=true;
+try{
+const r=await fetch('/api/auth/forgot-password/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+const d=await r.json();
+if(d.success){
+document.getElementById('forgotMsg').innerText=d.message;
+document.getElementById('forgotStep1').classList.add('hidden');
+document.getElementById('forgotStep2').classList.remove('hidden');
+}else alert(d.message||'কোড পাঠানো যায়নি!');
+}finally{btn.disabled=false}
+}
+
+async function resetForgotPassword(){
+const email=document.getElementById('forgotEmail').value.trim();
+const otp=document.getElementById('forgotOtp').value.trim();
+const new_password=document.getElementById('forgotNewPass').value.trim();
+if(!otp||!new_password)return alert('কোড এবং নতুন পাসওয়ার্ড দিন!');
+const btn=document.getElementById('forgotResetBtn');btn.disabled=true;
+try{
+const r=await fetch('/api/auth/forgot-password/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,otp,new_password})});
+const d=await r.json();
+alert(d.message);
+if(d.success){
+closeForgotModal();
+const oldEl=document.getElementById('editOldPass'),newEl=document.getElementById('editNewPass'),card=document.getElementById('editProfileCard');
+if(oldEl)oldEl.value='';
+if(newEl)newEl.value='';
+if(card)card.classList.add('hidden');
+}
+}finally{btn.disabled=false}
+}
 </script>
 </body>
-                                                                                                   </html>
+                                                                                                                                          </html>
