@@ -1,4 +1,4 @@
-# api/index.py
+# api/index.py — (এটি GitHub-এ api/index.py ফাইলে সেভ করে আমাকে "2" লিখুন, তাহলে নতুন index.html দেব)
 import os
 import json
 import sqlite3
@@ -27,10 +27,18 @@ DEFAULT_CATALOG = {
         {'name': '1240 Diamonds', 'price': 785, 'old': 840, 'save': 55},
         {'name': '2530 Diamonds', 'price': 1580, 'old': 1680, 'save': 100}
     ],
+    'GUILD GLORY BOT': [
+        {'name': '1 Squad (4 Bots)', 'price': 150, 'old': 180, 'save': 30},
+        {'name': '2 Squads (8 Bots)', 'price': 280, 'old': 350, 'save': 70},
+        {'name': '3 Squads (12 Bots)', 'price': 420, 'old': 520, 'save': 100},
+        {'name': '4 Squads (16 Bots)', 'price': 550, 'old': 700, 'save': 150}
+    ],
     'Guild Emote Bot': [
-        {'name': 'Guild Emote Bot - 7 Days', 'price': 120, 'old': 150, 'save': 30},
-        {'name': 'Guild Emot Bot - 30 Days', 'price': 550, 'old': 750, 'save': 200},
-        {'name': 'Guild Emote Bot - Permanent', 'price': 2500, 'old': 3500, 'save': 1000},
+        {'name': 'Guild Glory Bot - 7 Days', 'price': 120, 'old': 150, 'save': 30},
+        {'name': 'Guild Glory Bot - 30 Days', 'price': 350, 'old': 400, 'save': 50},
+        {'name': 'Emote Bot - 7 Days', 'price': 80, 'old': 100, 'save': 20},
+        {'name': 'Emote Bot - 30 Days', 'price': 250, 'old': 300, 'save': 50},
+        {'name': 'Guild + Emote Combo (30D)', 'price': 550, 'old': 650, 'save': 100}
     ],
     'FF Like Sell': [
         {'name': '100 Likes (Instant)', 'price': 5, 'old': 10, 'save': 5},
@@ -195,7 +203,10 @@ def get_config():
     return get_db_setting('config', load_file_settings())
 
 def get_catalog():
-    return get_db_setting('catalog', DEFAULT_CATALOG)
+    cat = get_db_setting('catalog', DEFAULT_CATALOG)
+    if 'GUILD GLORY BOT' not in cat:
+        cat['GUILD GLORY BOT'] = DEFAULT_CATALOG['GUILD GLORY BOT']
+    return cat
 
 def get_public_config():
     cfg = get_config()
