@@ -1,4 +1,3 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -125,6 +124,10 @@
         .stat-box { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px; }
         .stat-box small { font-size:10px; color:var(--muted); font-weight:700; display:block; }
         .stat-box b { font-size:16px; color:var(--text); }
+        .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.62); display:flex; align-items:center; justify-content:center; padding:18px; z-index:200; }
+        .modal-box { width:100%; max-width:380px; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:20px; padding:20px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.3); }
+        .modal-box h3 { font-size:17px; font-weight:800; margin-bottom:8px; color:var(--primary); }
+        .modal-box p { font-size:13px; color:var(--muted); line-height:1.6; margin-bottom:16px; white-space:pre-line; }
         .bottom-nav { position:fixed; bottom:12px; left:50%; transform:translateX(-50%); width:calc(100% - 24px); max-width:456px; background:var(--nav-bg); backdrop-filter:blur(12px); border:1px solid var(--border); border-radius:30px; display:flex; justify-content:space-around; padding:6px 4px; box-shadow:0 8px 24px rgba(0,0,0,0.09); z-index:100; }
         .nav-item { display:flex; flex-direction:column; align-items:center; font-size:10px; font-weight:700; color:var(--muted); cursor:pointer; padding:6px 12px; border-radius:22px; transition:.15s; }
         .nav-item.active { background:var(--primary-soft); color:var(--primary); }
@@ -482,7 +485,19 @@
                     </div>
                     <button class="btn-outline" onclick="switchTab('orders')">🧾 Transaction / Order History</button>
                     <button class="btn-outline" onclick="switchTab('support')">🎧 Customer Support</button>
+                    <button class="btn-outline" onclick="document.getElementById('editProfileCard').classList.toggle('hidden')">🔐 নাম / পাসওয়ার্ড পরিবর্তন</button>
                     <button class="submit-btn" onclick="logoutUser()" style="background:#ef4444; margin-top:10px;">Logout</button>
+                </div>
+
+                <div id="editProfileCard" class="form-card hidden">
+                    <h3>🔐 প্রোফাইল আপডেট করুন</h3>
+                    <label>নতুন নাম (বদলাতে চাইলে)</label>
+                    <input type="text" id="editProfName" placeholder="আপনার নাম">
+                    <label>বর্তমান পাসওয়ার্ড (আবশ্যক)</label>
+                    <input type="password" id="editOldPass" placeholder="বর্তমান পাসওয়ার্ড দিন">
+                    <label>নতুন পাসওয়ার্ড (বদলাতে চাইলে)</label>
+                    <input type="password" id="editNewPass" placeholder="নতুন পাসওয়ার্ড দিন">
+                    <button class="submit-btn" onclick="updateProfile()">আপডেট সেভ করুন</button>
                 </div>
             </div>
         </div>
@@ -512,6 +527,15 @@
             </div>
             <div id="adminPricesBox" class="hidden"></div>
             <div id="adminSettingsBox" class="hidden"></div>
+        </div>
+    </div>
+
+    <!-- Notice Popup Modal -->
+    <div id="noticeModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeNotice()">
+        <div class="modal-box">
+            <h3 id="noticeModalTitle"></h3>
+            <p id="noticeModalText"></p>
+            <button class="submit-btn" onclick="closeNotice()">ঠিক আছে</button>
         </div>
     </div>
 
@@ -573,6 +597,18 @@
         return String(str ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     }
 
+    function showNoticeIfNeeded() {
+        if (!AUTO_ADMIN && SHOP_CONFIG.notice_enabled && SHOP_CONFIG.notice_text && !sessionStorage.getItem('redteam_notice_seen')) {
+            document.getElementById('noticeModalTitle').innerText = SHOP_CONFIG.notice_title || 'নোটিশ';
+            document.getElementById('noticeModalText').innerText = SHOP_CONFIG.notice_text;
+            document.getElementById('noticeModal').classList.remove('hidden');
+        }
+    }
+    function closeNotice() {
+        sessionStorage.setItem('redteam_notice_seen', '1');
+        document.getElementById('noticeModal').classList.add('hidden');
+    }
+
     function initSettingsUI() {
         document.getElementById('hdrShopName').innerText = SHOP_CONFIG.shop_name || 'RED TEAM SHOP';
         document.getElementById('heroShopName').innerText = SHOP_CONFIG.shop_name || 'RED TEAM SHOP';
@@ -628,6 +664,7 @@
     initSettingsUI();
     renderLiveStats();
     refreshUser();
+    showNoticeIfNeeded();
 
     if (AUTO_ADMIN || window.location.hash === '#admin') {
         setTimeout(() => openAdminPanel(), 250);
@@ -670,6 +707,7 @@
             document.getElementById('profName').innerText = currentUser.name;
             document.getElementById('profPhone').innerText = contact;
             document.getElementById('profBal').innerText = `৳${currentUser.balance}`;
+            document.getElementById('editProfName').value = currentUser.name;
         } else {
             hdrBtn.innerText = 'Login';
             hwText.innerText = 'লগইন করে ওয়ালেটে টাকা অ্যাড করুন';
@@ -752,6 +790,28 @@
             switchTab('home');
         } else {
             alert(data.message || "সমস্যা হয়েছে!");
+        }
+    }
+
+    async function updateProfile() {
+        const name = document.getElementById('editProfName').value.trim();
+        const old_password = document.getElementById('editOldPass').value.trim();
+        const new_password = document.getElementById('editNewPass').value.trim();
+        if (!old_password) return alert("বর্তমান পাসওয়ার্ড দিন!");
+        const res = await fetch('/api/user/update-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUser.id, name, old_password, new_password })
+        });
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) {
+            currentUser = data.user;
+            localStorage.setItem('redteam_user', JSON.stringify(currentUser));
+            document.getElementById('editOldPass').value = '';
+            document.getElementById('editNewPass').value = '';
+            document.getElementById('editProfileCard').classList.add('hidden');
+            updateUI();
         }
     }
 
@@ -1245,135 +1305,12 @@
     function renderAdminPrices() {
         const cats = Object.keys(adminCatalogDraft);
         let html = `<div class="form-card"><h3>🏷️ সব প্যাকেজের নাম ও দাম চেঞ্জ করুন</h3>`;
-        cats.forEach(cat => {
+        cats.forEach((cat, cIdx) => {
             html += `<div style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <strong style="color:var(--primary);">${esc(cat)}</strong>
-                    <button onclick="addCatalogPkg('${esc(cat)}')" style="background:var(--primary); color:#fff; border:none; padding:4px 10px; border-radius:8px; font-size:11px; cursor:pointer;">+ Add</button>
+                    <button onclick="addCatalogPkg(${cIdx})" style="background:var(--primary); color:#fff; border:none; padding:4px 10px; border-radius:8px; font-size:11px; cursor:pointer;">+ Add</button>
                 </div>`;
             adminCatalogDraft[cat].forEach((pkg, idx) => {
                 html += `
-                <div style="background:var(--surface); padding:8px; border-radius:10px; margin-bottom:6px; border:1px solid var(--border);">
-                    <input type="text" value="${esc(pkg.name)}" onchange="adminCatalogDraft['${esc(cat)}'][${idx}].name=this.value" placeholder="Package Name" style="margin-bottom:6px; padding:7px;">
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:5px; align-items:center;">
-                        <input type="number" value="${pkg.price}" onchange="adminCatalogDraft['${esc(cat)}'][${idx}].price=parseInt(this.value||0)" placeholder="Price" style="margin:0; padding:7px;">
-                        <input type="number" value="${pkg.old}" onchange="adminCatalogDraft['${esc(cat)}'][${idx}].old=parseInt(this.value||0)" placeholder="Old" style="margin:0; padding:7px;">
-                        <input type="number" value="${pkg.save}" onchange="adminCatalogDraft['${esc(cat)}'][${idx}].save=parseInt(this.value||0)" placeholder="Save" style="margin:0; padding:7px;">
-                        <button onclick="removeCatalogPkg('${esc(cat)}', ${idx})" style="background:#ef4444; color:#fff; border:none; padding:7px 9px; border-radius:8px; cursor:pointer;">✕</button>
-                    </div>
-                </div>`;
-            });
-            html += `</div>`;
-        });
-        html += `<button class="submit-btn" onclick="saveAdminCatalog()">💾 সব দাম সেভ করুন</button></div>`;
-        document.getElementById('adminPricesBox').innerHTML = html;
-    }
-
-    function addCatalogPkg(cat) {
-        adminCatalogDraft[cat].push({ name: 'New Package', price: 100, old: 120, save: 20 });
-        renderAdminPrices();
-    }
-
-    function removeCatalogPkg(cat, idx) {
-        adminCatalogDraft[cat].splice(idx, 1);
-        renderAdminPrices();
-    }
-
-    async function saveAdminCatalog() {
-        const res = await fetch('/api/admin/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
-            body: JSON.stringify({ catalog: adminCatalogDraft })
-        });
-        const data = await res.json();
-        catalog = JSON.parse(JSON.stringify(adminCatalogDraft));
-        alert(data.message || "সেভ হয়েছে!");
-    }
-
-    function renderAdminSettings(reps) {
-        const cfg = adminConfigDraft;
-        const pms = cfg.payment_methods || [];
-        let html = `
-        <div class="form-card">
-            <h3>⚙️ ওয়েবসাইট সেটিংস (সব চেঞ্জ করুন)</h3>
-            <label>Shop Name</label>
-            <input type="text" id="cfgShopName" value="${esc(cfg.shop_name)}">
-            <label>উপরের নোটিশ (Ticker Text)</label>
-            <input type="text" id="cfgTicker" value="${esc(cfg.ticker_text)}">
-            <label>WhatsApp নম্বর (880 সহ)</label>
-            <input type="text" id="cfgWhatsapp" value="${esc(cfg.whatsapp_number)}">
-            <label>আজকের অর্ডার কাউন্ট বাড়াতে চাইলে (+ Offset দিন)</label>
-            <input type="number" id="cfgOffset" value="${cfg.today_count_offset || 0}">
-            <label>Telegram Bot Token (@BotFather থেকে নিন)</label>
-            <input type="text" id="cfgTgToken" value="${esc(cfg.telegram_bot_token || '')}" placeholder="যেমন: 123456789:AAH...">
-            <label>Telegram Chat ID (@userinfobot থেকে নিন)</label>
-            <input type="text" id="cfgTgChatId" value="${esc(cfg.telegram_chat_id || '')}" placeholder="যেমন: 5123456789">
-            <label>নতুন Admin Password (খালি রাখলে আগেরটাই থাকবে)</label>
-            <input type="text" id="cfgAdminPass" placeholder="নতুন পাসওয়ার্ড">
-            <label>পেমেন্ট নম্বরসমূহ:</label>
-            <div>
-                ${pms.map((m, i) => `
-                    <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:5px; margin-bottom:6px;">
-                        <input type="text" value="${esc(m.name)}" onchange="adminConfigDraft.payment_methods[${i}].name=this.value" style="margin:0; padding:8px;">
-                        <input type="text" value="${esc(m.number)}" onchange="adminConfigDraft.payment_methods[${i}].number=this.value" style="margin:0; padding:8px;">
-                        <button onclick="adminConfigDraft.payment_methods.splice(${i},1); renderAdminSettings([])" style="background:#ef4444; color:#fff; border:none; padding:0 10px; border-radius:8px;">✕</button>
-                    </div>
-                `).join('')}
-            </div>
-            <button type="button" class="btn-outline" style="margin-bottom:10px;" onclick="adminConfigDraft.payment_methods.push({name:'New Method',number:'017XXXXXXXX'}); renderAdminSettings([])">+ পেমেন্ট মাধ্যম যোগ করুন</button>
-            <button class="submit-btn" onclick="saveAdminConfig()">💾 সেটিংস সেভ করুন</button>
-        </div>
-
-        <div class="form-card">
-            <h3>📝 কাস্টমার Support Reports</h3>
-            ${(!Array.isArray(reps) || !reps.length) ? '<p style="font-size:12px; color:var(--muted);">কোনো রিপোর্ট নেই।</p>' : reps.map(r => `
-                <div class="order-item">
-                    <div style="display:flex; justify-content:space-between;">
-                        <strong>#${r.id} - ${esc(r.issue_type)} (${esc(r.phone)})</strong>
-                        <span class="status ${esc(r.status)}">${esc(r.status)}</span>
-                    </div>
-                    <div>Order/Trx: <b>${esc(r.order_id || 'N/A')}</b></div>
-                    <div style="margin:4px 0;">${esc(r.details)}</div>
-                    <button onclick="replyReport(${r.id})" style="background:var(--primary); color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11px; cursor:pointer;">Reply & Resolve</button>
-                </div>
-            `).join('')}
-        </div>`;
-        document.getElementById('adminSettingsBox').innerHTML = html;
-    }
-
-    async function saveAdminConfig() {
-        adminConfigDraft.shop_name = document.getElementById('cfgShopName').value.trim();
-        adminConfigDraft.ticker_text = document.getElementById('cfgTicker').value.trim();
-        adminConfigDraft.whatsapp_number = document.getElementById('cfgWhatsapp').value.trim();
-        adminConfigDraft.today_count_offset = parseInt(document.getElementById('cfgOffset').value || '0', 10);
-        adminConfigDraft.telegram_bot_token = document.getElementById('cfgTgToken').value.trim();
-        adminConfigDraft.telegram_chat_id = document.getElementById('cfgTgChatId').value.trim();
-        const newPw = document.getElementById('cfgAdminPass').value.trim();
-        if (newPw) adminConfigDraft.admin_password = newPw;
-
-        const res = await fetch('/api/admin/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
-            body: JSON.stringify({ config: adminConfigDraft })
-        });
-        const data = await res.json();
-        if (newPw) adminPass = newPw;
-        SHOP_CONFIG = { ...SHOP_CONFIG, ...adminConfigDraft };
-        initSettingsUI();
-        refreshLiveStats();
-        alert(data.message || "সেটিংস সেভ হয়েছে!");
-    }
-
-    async function replyReport(id) {
-        const reply = prompt("কাস্টমারের জন্য রিপ্লাই লিখুন:");
-        if (reply === null) return;
-        await fetch('/api/admin/reports', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
-            body: JSON.stringify({ id, status: 'Resolved', admin_reply: reply })
-        });
-        loadAdminSettingsAndCatalog();
-    }
-</script>
-</body>
-                        </html>
+                <div style="background:var(--surface); padding:8px; border-radius:10px; margin-bottom:6px; border:
