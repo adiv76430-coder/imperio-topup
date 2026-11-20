@@ -1,8 +1,4 @@
-<!-- templates/index.html
-  * আপনার গোপন Admin Panel খোলার ২টি উপায় (কাস্টমাররা দেখতে পাবে না):
-    ১) ব্রাউজারে যান: red-x-shop.vercel.app/admin
-    ২) অথবা হোম পেজের ওপরের "⚡ RED TEAM SHOP" লোগোতে দ্রুত ৫ বার টাচ করুন!
--->
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -513,7 +509,10 @@
 
             <div id="adminOrdersList">লোড হচ্ছে...</div>
             <div id="adminWalletList" class="hidden">লোড হচ্ছে...</div>
-            <div id="adminUsersList" class="hidden">লোড হচ্ছে...</div>
+            <div id="adminUsersBox" class="hidden">
+                <input type="text" id="adminUserSearch" placeholder="🔍 Gmail বা নাম লিখে ইউজার খুঁজুন..." oninput="renderAdminUsers()" style="margin-bottom:10px;">
+                <div id="adminUsersList">লোড হচ্ছে...</div>
+            </div>
             <div id="adminPricesBox" class="hidden"></div>
             <div id="adminSettingsBox" class="hidden"></div>
         </div>
@@ -544,6 +543,7 @@
     let adminPass = '';
     let adminConfigDraft = null;
     let adminCatalogDraft = null;
+    let adminUsersCache = [];
     let logoTapCount = 0;
     let logoTapTimer = null;
 
@@ -851,6 +851,7 @@
         currentCategory = cat;
         selectedRegion = 'BD';
         guildVerified = false;
+        document.getElementById('ignInput').value = '';
         document.getElementById('homeView').classList.add('hidden');
         document.getElementById('mainHeader').classList.add('hidden');
         document.getElementById('orderView').classList.remove('hidden');
@@ -869,7 +870,7 @@
         document.getElementById('regionGroup').classList.toggle('hidden', !isGlory);
         document.getElementById('guildMyGroupsCard').classList.toggle('hidden', !isGlory);
         document.getElementById('supportedRegionsCard').classList.toggle('hidden', !isGlory);
-        document.getElementById('ignGroup').classList.toggle('hidden', isGlory);
+        document.getElementById('ignGroup').classList.toggle('hidden', isGlory || isLike);
 
         document.getElementById('step1Title').innerText = isGlory ? 'Verify Your Guild' : isEmote ? 'Guild / Player Info' : isLike ? 'Enter Your Free Fire ID' : 'Player Info';
         document.getElementById('uidLabel').innerText = isGlory ? 'Guild ID' : isEmote ? 'Guild ID / Player UID' : 'Free Fire Player UID';
@@ -1014,7 +1015,7 @@
                     <strong>#${o.id} - ${esc(o.package_name)} (৳${o.price})</strong>
                     <span class="status ${esc(o.status)}">${esc(o.status)}</span>
                 </div>
-                <div>ID: <b>${esc(o.uid)}</b> (${esc(o.region || 'BD')}) • Name: ${esc(o.ign || 'N/A')}</div>
+                <div>ID: <b>${esc(o.uid)}</b> (${esc(o.region || 'BD')})${o.ign ? ' • Name: ' + esc(o.ign) : ''}</div>
                 <div>Payment: <b>${esc(o.payment_method)}</b> (Trx: ${esc(o.trx_id)})</div>
                 <div>Phone: ${esc(o.phone)}</div>
                 <div style="color:var(--muted); font-size:11px; margin-top:4px;">${esc(o.created_at)}</div>
@@ -1127,24 +1128,36 @@
                     • Pending: ${data.pending_orders} Orders, ${data.pending_wallet} Wallet
                 </div>
             `;
-            const usersBox = document.getElementById('adminUsersList');
-            if (!data.users || !data.users.length) {
-                usersBox.innerHTML = '<p style="text-align:center; color:var(--muted);">কোনো ইউজার নেই।</p>';
-            } else {
-                usersBox.innerHTML = data.users.map(u => `
-                    <div class="order-item">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div><strong>#${u.id} - ${esc(u.name)}</strong><br><small>${esc(u.email || u.phone || '')}</small></div>
-                            <strong style="color:var(--primary); font-size:15px;">৳${u.balance}</strong>
-                        </div>
-                        <div style="display:flex; gap:6px; margin-top:8px;">
-                            <button onclick="adjustUserBal(${u.id}, true)" style="background:#16a34a; color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11px; cursor:pointer;">+ Add Bal</button>
-                            <button onclick="adjustUserBal(${u.id}, false)" style="background:#ef4444; color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11px; cursor:pointer;">- Cut Bal</button>
-                        </div>
-                    </div>
-                `).join('');
-            }
+            adminUsersCache = data.users || [];
+            renderAdminUsers();
         }
+    }
+
+    function renderAdminUsers() {
+        const q = (document.getElementById('adminUserSearch')?.value || '').trim().toLowerCase();
+        const filtered = q ? adminUsersCache.filter(u =>
+            (u.name || '').toLowerCase().includes(q) ||
+            (u.email || '').toLowerCase().includes(q) ||
+            (u.phone || '').toLowerCase().includes(q) ||
+            String(u.id) === q
+        ) : adminUsersCache;
+        const usersBox = document.getElementById('adminUsersList');
+        if (!filtered.length) {
+            usersBox.innerHTML = '<p style="text-align:center; color:var(--muted);">কোনো ইউজার পাওয়া যায়নি।</p>';
+            return;
+        }
+        usersBox.innerHTML = filtered.map(u => `
+            <div class="order-item">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div><strong>#${u.id} - ${esc(u.name)}</strong><br><small>${esc(u.email || u.phone || '')}</small></div>
+                    <strong style="color:var(--primary); font-size:15px;">৳${u.balance}</strong>
+                </div>
+                <div style="display:flex; gap:6px; margin-top:8px;">
+                    <button onclick="adjustUserBal(${u.id}, true)" style="background:#16a34a; color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11px; cursor:pointer;">+ Add Bal</button>
+                    <button onclick="adjustUserBal(${u.id}, false)" style="background:#ef4444; color:#fff; border:none; padding:5px 10px; border-radius:8px; font-size:11px; cursor:pointer;">- Cut Bal</button>
+                </div>
+            </div>
+        `).join('');
     }
 
     async function adjustUserBal(uid, isAdd) {
@@ -1164,7 +1177,7 @@
         Object.keys(map).forEach(k => document.getElementById(map[k]).classList.toggle('active', k === tab));
         document.getElementById('adminOrdersList').classList.toggle('hidden', tab !== 'orders');
         document.getElementById('adminWalletList').classList.toggle('hidden', tab !== 'wallet');
-        document.getElementById('adminUsersList').classList.toggle('hidden', tab !== 'users');
+        document.getElementById('adminUsersBox').classList.toggle('hidden', tab !== 'users');
         document.getElementById('adminPricesBox').classList.toggle('hidden', tab !== 'prices');
         document.getElementById('adminSettingsBox').classList.toggle('hidden', tab !== 'settings');
         if (tab === 'orders') loadOrders(true);
@@ -1363,4 +1376,4 @@
     }
 </script>
 </body>
-                        </html>
+ </html>
