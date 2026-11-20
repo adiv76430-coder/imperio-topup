@@ -1,7 +1,9 @@
-# api/index.py — (এটি GitHub-এ api/index.py ফাইলে সেভ করে "2" লিখুন, তারপর নতুন index.html দেব)
+# api/index.py
 import os
 import json
 import sqlite3
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -69,6 +71,8 @@ def load_file_settings():
         "whatsapp_number": "88017XXXXXXXX",
         "admin_password": "1234",
         "today_count_offset": 0,
+        "telegram_bot_token": "",
+        "telegram_chat_id": "",
         "support_hours": "08:00 AM - 11:00 PM (7 Days)",
         "response_time": "< 5 minutes",
         "payment_methods": [
@@ -233,6 +237,23 @@ def is_admin_authorized():
     expected = os.environ.get("ADMIN_PASSWORD") or cfg.get("admin_password", "1234")
     provided = request.headers.get("X-Admin-Password", "")
     return bool(provided) and provided == str(expected)
+
+def send_telegram_alert(message_text):
+    try:
+        cfg = get_config()
+        token = (os.environ.get("TELEGRAM_BOT_TOKEN") or cfg.get("telegram_bot_token") or "").strip()
+        chat_id = (os.environ.get("TELEGRAM_CHAT_ID") or cfg.get("telegram_chat_id") or "").strip()
+        if not token or not chat_id:
+            return
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": message_text
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, method="POST")
+        urllib.request.urlopen(req, timeout=3)
+    except Exception:
+        pass
 
 def mask_uid(uid):
     s = str(uid or '').strip()
@@ -436,6 +457,15 @@ def add_wallet_request():
                       VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})''',
                   (user['id'], user['name'], contact, amount, method, trx_id, now))
         conn.commit()
+
+        send_telegram_alert(
+            f"💰 NEW ADD MONEY REQUEST\n"
+            f"User: {user['name']} ({contact})\n"
+            f"Amount: ৳{amount}\n"
+            f"Method: {method}\n"
+            f"TrxID: {trx_id}\n"
+            f"Time: {now}"
+        )
         return jsonify({"success": True, "message": "Add Money রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যোগ করে দেবেন।"})
     finally:
         conn.close()
@@ -471,10 +501,10 @@ def create_order():
     region = str(data.get('region', 'BD')).strip()[:10]
     pay_method = str(data.get('payment_method', '')).strip()
     trx_id = str(data.get('trx_id', '')).strip()
-    phone = str(data.get('phone', '')).strip()
+    contact_info = str(data.get('phone', '')).strip()
 
-    if not uid or not phone:
-        return jsonify({"success": False, "message": "ID এবং ফোন নম্বর দিন!"}), 400
+    if not uid:
+        return jsonify({"success": False, "message": "দয়া করে Player UID / Guild ID দিন!"}), 400
 
     catalog = get_catalog()
     matched_pkg = next((pkg for pkg in catalog.get(category, []) if pkg['name'] == package_name), None)
@@ -489,6 +519,14 @@ def create_order():
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
+
+        if not contact_info and user_id > 0:
+            c.execute(f"SELECT name, email, phone FROM users WHERE id = {p}", (user_id,))
+            u_row = c.fetchone()
+            if u_row:
+                contact_info = u_row['email'] or u_row['phone'] or u_row['name'] or 'User'
+        if not contact_info:
+            contact_info = "Guest"
 
         if pay_method == "Wallet Balance":
             if user_id <= 0:
@@ -508,16 +546,27 @@ def create_order():
             query = f'''INSERT INTO orders
                 (user_id, category, package_name, price, uid, ign, region, payment_method, trx_id, phone, created_at)
                 VALUES ({', '.join([p]*11)}) RETURNING id'''
-            c.execute(query, (user_id, category, package_name, price, uid, ign, region, pay_method, trx_id, phone, now))
+            c.execute(query, (user_id, category, package_name, price, uid, ign, region, pay_method, trx_id, contact_info, now))
             order_id = c.fetchone()['id']
         else:
             query = f'''INSERT INTO orders
                 (user_id, category, package_name, price, uid, ign, region, payment_method, trx_id, phone, created_at)
                 VALUES ({', '.join([p]*11)})'''
-            c.execute(query, (user_id, category, package_name, price, uid, ign, region, pay_method, trx_id, phone, now))
+            c.execute(query, (user_id, category, package_name, price, uid, ign, region, pay_method, trx_id, contact_info, now))
             order_id = c.lastrowid
 
         conn.commit()
+
+        send_telegram_alert(
+            f"🛒 NEW ORDER #{order_id}\n"
+            f"Category: {category}\n"
+            f"Package: {package_name} (৳{price})\n"
+            f"UID / Guild ID: {uid} ({region})\n"
+            f"IGN: {ign or 'N/A'}\n"
+            f"Payment: {pay_method} | Trx: {trx_id}\n"
+            f"Customer: {contact_info}\n"
+            f"Time: {now}"
+        )
         return jsonify({"success": True, "order_id": order_id, "message": f"অর্ডার #{order_id} সফলভাবে গ্রহণ করা হয়েছে!"})
     finally:
         conn.close()
@@ -575,6 +624,14 @@ def handle_reports():
                           (user_id, phone, issue_type, order_id, details, now))
                 rep_id = c.lastrowid
             conn.commit()
+
+            send_telegram_alert(
+                f"📩 NEW SUPPORT REPORT #{rep_id}\n"
+                f"Issue: {issue_type}\n"
+                f"Order/Trx: {order_id or 'N/A'}\n"
+                f"From: {phone}\n"
+                f"Details: {details}"
+            )
             return jsonify({"success": True, "report_id": rep_id, "message": "আপনার রিপোর্ট জমা দেওয়া হয়েছে!"})
         finally:
             conn.close()
