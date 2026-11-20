@@ -185,7 +185,7 @@
                     <div class="cat-bottom">GUILD GLORY BOT</div>
                 </div>
                 <div class="cat-card" onclick="openCategory('Guild Emote Bot')">
-                    <div class="cat-top hot-cat"><span class="cat-tag">BOT</span><span class="icon">🤖</span><span class="sub">Glory & Emote</span></div>
+                    <div class="cat-top hot-cat"><span class="cat-tag">BOT</span><span class="icon">🤖</span><span class="sub">Emote Bot Service</span></div>
                     <div class="cat-bottom">Guild Emote Bot</div>
                 </div>
                 <div class="cat-card" onclick="openCategory('FF Like Sell')">
@@ -284,7 +284,7 @@
 
                 <div class="launch-price-row">
                     <div>
-                        <small style="font-size:10px; font-weight:700; color:var(--muted); display:block;">LAUNCH / PACKAGE PRICE</small>
+                        <small style="font-size:10px; font-weight:700; color:var(--muted); display:block;">PACKAGE PRICE</small>
                         <div class="launch-price-val" id="selectedPriceDisplay">৳0.00</div>
                     </div>
                     <span class="verify-pill hidden" id="guildVerifyBadge">Guild ID: Not verified</span>
@@ -545,7 +545,7 @@
     let adminConfigDraft = null;
     let adminCatalogDraft = null;
 
-    function isGuildCat(c) { return c === 'Guild Emote Bot' || c === 'GUILD GLORY BOT'; }
+    function isGloryCat(c) { return c === 'GUILD GLORY BOT'; }
 
     function initTheme() {
         if (localStorage.getItem('redteam_theme') === 'dark') {
@@ -838,24 +838,25 @@
         document.getElementById('catTitle').innerText = cat;
         document.getElementById('catServerPill').innerText = 'BD';
 
-        const isGuild = isGuildCat(cat);
+        const isGlory = isGloryCat(cat);
+        const isEmote = cat === 'Guild Emote Bot';
         const isLike = cat === 'FF Like Sell';
 
-        document.getElementById('guildGuideCard').classList.toggle('hidden', !isGuild);
-        document.getElementById('verifyGuildBtn').classList.toggle('hidden', !isGuild);
-        document.getElementById('verifyHelperText').classList.toggle('hidden', !isGuild);
-        document.getElementById('guildExtraBox').classList.toggle('hidden', !isGuild);
-        document.getElementById('guildVerifyBadge').classList.toggle('hidden', !isGuild);
-        document.getElementById('regionGroup').classList.toggle('hidden', !isGuild);
-        document.getElementById('guildMyGroupsCard').classList.toggle('hidden', !isGuild);
-        document.getElementById('supportedRegionsCard').classList.toggle('hidden', !isGuild);
-        document.getElementById('ignGroup').classList.toggle('hidden', isGuild);
+        document.getElementById('guildGuideCard').classList.toggle('hidden', !isGlory);
+        document.getElementById('verifyGuildBtn').classList.toggle('hidden', !isGlory);
+        document.getElementById('verifyHelperText').classList.toggle('hidden', !isGlory);
+        document.getElementById('guildExtraBox').classList.toggle('hidden', !isGlory);
+        document.getElementById('guildVerifyBadge').classList.toggle('hidden', !isGlory);
+        document.getElementById('regionGroup').classList.toggle('hidden', !isGlory);
+        document.getElementById('guildMyGroupsCard').classList.toggle('hidden', !isGlory);
+        document.getElementById('supportedRegionsCard').classList.toggle('hidden', !isGlory);
+        document.getElementById('ignGroup').classList.toggle('hidden', isGlory);
 
-        document.getElementById('step1Title').innerText = isGuild ? 'Verify Your Guild' : isLike ? 'Enter Your Free Fire ID' : 'Player Info';
-        document.getElementById('uidLabel').innerText = isGuild ? 'Guild ID' : 'Free Fire Player UID';
-        document.getElementById('uidInput').placeholder = isGuild ? 'Enter your Guild ID' : 'Enter your Free Fire ID';
-        document.getElementById('step2Title').innerText = isGuild ? 'Send a squad of bots to my guild' : isLike ? 'Like Packages' : 'Select Package';
-        document.getElementById('orderSubmitBtn').innerText = isGuild ? '🚀 Send bots to my guild' : '🚀 অর্ডার কনফার্ম করুন';
+        document.getElementById('step1Title').innerText = isGlory ? 'Verify Your Guild' : isEmote ? 'Guild / Player Info' : isLike ? 'Enter Your Free Fire ID' : 'Player Info';
+        document.getElementById('uidLabel').innerText = isGlory ? 'Guild ID' : isEmote ? 'Guild ID / Player UID' : 'Free Fire Player UID';
+        document.getElementById('uidInput').placeholder = isGlory ? 'Enter your Guild ID' : isEmote ? 'Guild ID বা UID দিন' : 'Enter your Free Fire ID';
+        document.getElementById('step2Title').innerText = isGlory ? 'Send a squad of bots to my guild' : isEmote ? 'Select Emote Bot Package' : isLike ? 'Like Packages' : 'Select Package';
+        document.getElementById('orderSubmitBtn').innerText = isGlory ? '🚀 Send bots to my guild' : '🚀 অর্ডার কনফার্ম করুন';
         resetGuildVerify();
 
         const grid = document.getElementById('pkgGrid');
@@ -882,7 +883,7 @@
         });
 
         selectPayMode(currentUser && currentUser.balance > 0 ? 'Wallet Balance' : 'MFS');
-        if (isGuild) loadGuildGroups();
+        if (isGlory) loadGuildGroups();
     }
 
     async function loadGuildGroups() {
@@ -898,7 +899,7 @@
             url = `/api/orders?ids=${guestOrders.join(',')}`;
         }
         const res = await fetch(url);
-        const orders = (await res.json()).filter(o => isGuildCat(o.category));
+        const orders = (await res.json()).filter(o => isGloryCat(o.category));
         if (!orders.length) {
             box.innerHTML = '<div style="text-align:center; padding:14px 8px; color:var(--muted); font-size:12px;">You have not launched a group yet.</div>';
             return;
@@ -917,7 +918,7 @@
     async function submitOrder() {
         if (!selectedPackage) return alert("প্যাকেজ সিলেক্ট করুন!");
         const uid = document.getElementById('uidInput').value.trim();
-        if (isGuildCat(currentCategory) && !guildVerified) {
+        if (isGloryCat(currentCategory) && !guildVerified) {
             return alert("আগে Verify বাটনে ক্লিক করে আপনার Guild ID ভেরিফাই করুন!");
         }
         const ign = document.getElementById('ignInput').value.trim();
@@ -956,7 +957,7 @@
                 document.getElementById('trxInput').value = '';
                 refreshUser();
                 refreshLiveStats();
-                if (isGuildCat(currentCategory)) loadGuildGroups();
+                if (isGloryCat(currentCategory)) loadGuildGroups();
                 else switchTab('orders');
             } else {
                 alert(data.message);
@@ -1342,4 +1343,4 @@
     }
 </script>
 </body>
-    </html>
+</html>
