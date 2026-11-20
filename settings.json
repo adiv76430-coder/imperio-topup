@@ -1,6 +1,6 @@
 {
   "whatsapp_number": "8801403257780",
-  "admin_password": "1234",
+  "admin_password": "adie1122",
   "payment_methods": [
     {
       "name": "bKash (Send Money)",
@@ -12,7 +12,7 @@
     },
     {
       "name": "Rocket (Send Money)",
-      "number": "01908657080"
+      "number": ""
     }
   ]
 }
