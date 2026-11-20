@@ -1,3 +1,4 @@
+# api/index.py
 import os
 import json
 import sqlite3
@@ -15,7 +16,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 SQLITE_PATH = "/tmp/shop.db"
 _db_initialized = False
 
-CATALOG = {
+DEFAULT_CATALOG = {
     'Diamonds': [
         {'name': '25 Diamonds', 'price': 22, 'old': 25, 'save': 3},
         {'name': '50 Diamonds', 'price': 40, 'old': 45, 'save': 5},
@@ -26,25 +27,25 @@ CATALOG = {
         {'name': '1240 Diamonds', 'price': 785, 'old': 840, 'save': 55},
         {'name': '2530 Diamonds', 'price': 1580, 'old': 1680, 'save': 100}
     ],
-    'Level Up Pass': [
-        {'name': 'Level Up Pass (Full)', 'price': 165, 'old': 180, 'save': 15}
+    'Guild Emote Bot': [
+        {'name': 'Guild Emote Bot - 7 Days', 'price': 120, 'old': 150, 'save': 30},
+        {'name': 'Guild Emot Bot - 30 Days', 'price': 550, 'old': 750, 'save': 200},
+        {'name': 'Guild Emote Bot - Permanent', 'price': 2500, 'old': 3500, 'save': 1000},
+    ],
+    'FF Like Sell': [
+        {'name': '100 Likes (Instant)', 'price': 5, 'old': 10, 'save': 5},
+        {'name': '220 Likes (Instant)', 'price': 10, 'old': 15, 'save': 5},
+        {'name': 'Daily Like Bot - 30 Days', 'price': 100, 'old': 120, 'save': 20},
+        {'name': 'Daily Like Bot - 90 Days', 'price': 300, 'old': 350, 'save': 50},
+        {'name': 'Daily Like Bot - 365 Days', 'price': 1000, 'old': 1200, 'save': 200}
     ],
     'Memberships': [
         {'name': 'Weekly Lite', 'price': 35, 'old': 45, 'save': 10},
         {'name': 'Weekly Membership', 'price': 155, 'old': 170, 'save': 15},
         {'name': 'Monthly Membership', 'price': 760, 'old': 800, 'save': 40}
     ],
-    'FF Like Sell': [
-        {'name': 'Daily Like Bot - 30 Days', 'price': 100, 'old': 120, 'save': 20},
-        {'name': 'Daily Like Bot - 90 Days', 'price': 300, 'old': 350, 'save': 50},
-        {'name': 'Daily Like Bot - 365 Days', 'price': 1000, 'old': 1200, 'save': 200}
-    ],
-    'Guild Emote Bot': [
-        {'name': 'Guild Glory Bot - 7 Days', 'price': 120, 'old': 150, 'save': 30},
-        {'name': 'Guild Glory Bot - 30 Days', 'price': 350, 'old': 400, 'save': 50},
-        {'name': 'Emote Bot - 7 Days', 'price': 80, 'old': 100, 'save': 20},
-        {'name': 'Emote Bot - 30 Days', 'price': 250, 'old': 300, 'save': 50},
-        {'name': 'Guild + Emote Combo (30D)', 'price': 550, 'old': 650, 'save': 100}
+    'Level Up Pass': [
+        {'name': 'Level Up Pass (Full)', 'price': 165, 'old': 180, 'save': 15}
     ],
     'Evo Access': [
         {'name': 'Evo Access - 3 Days', 'price': 65, 'old': 80, 'save': 15},
@@ -53,10 +54,15 @@ CATALOG = {
     ]
 }
 
-def load_settings():
+def load_file_settings():
     default_settings = {
+        "shop_name": "RED TEAM SHOP",
+        "ticker_text": "Topup in seconds - Available 24/7! Fast & Trusted",
         "whatsapp_number": "88017XXXXXXXX",
         "admin_password": "1234",
+        "today_count_offset": 0,
+        "support_hours": "08:00 AM - 11:00 PM (7 Days)",
+        "response_time": "< 5 minutes",
         "payment_methods": [
             {"name": "bKash (Send Money)", "number": "017XXXXXXXX"},
             {"name": "Nagad (Send Money)", "number": "018XXXXXXXX"}
@@ -65,23 +71,11 @@ def load_settings():
     try:
         if os.path.exists(SETTINGS_PATH):
             with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return data
+                loaded = json.load(f)
+                default_settings.update(loaded)
     except Exception:
         pass
     return default_settings
-
-def get_public_settings():
-    s = load_settings()
-    return {
-        "whatsapp_number": s.get("whatsapp_number", ""),
-        "payment_methods": s.get("payment_methods", [])
-    }
-
-def is_admin_authorized():
-    expected = os.environ.get("ADMIN_PASSWORD") or load_settings().get("admin_password", "1234")
-    provided = request.headers.get("X-Admin-Password", "")
-    return bool(provided) and provided == str(expected)
 
 def get_connection():
     if DATABASE_URL:
@@ -132,14 +126,125 @@ def init_db():
             price INTEGER,
             uid TEXT,
             ign TEXT,
+            region TEXT DEFAULT 'BD',
             payment_method TEXT,
             trx_id TEXT,
             phone TEXT,
             status TEXT DEFAULT 'Pending',
             created_at TEXT
         )''')
+
+        if db_type == "postgres":
+            c.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS region TEXT DEFAULT 'BD'")
+        else:
+            try:
+                c.execute("ALTER TABLE orders ADD COLUMN region TEXT DEFAULT 'BD'")
+            except Exception:
+                pass
+
+        c.execute('''CREATE TABLE IF NOT EXISTS site_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )''')
+
+        c.execute(f'''CREATE TABLE IF NOT EXISTS support_reports (
+            id {id_col},
+            user_id INTEGER DEFAULT 0,
+            phone TEXT,
+            issue_type TEXT,
+            order_id TEXT,
+            details TEXT,
+            status TEXT DEFAULT 'Open',
+            admin_reply TEXT DEFAULT '',
+            created_at TEXT
+        )''')
+
         conn.commit()
         _db_initialized = True
+    finally:
+        conn.close()
+
+def get_db_setting(key, fallback):
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT value FROM site_settings WHERE key = {p}", (key,))
+        row = c.fetchone()
+        if row and row['value']:
+            return json.loads(row['value'])
+    except Exception:
+        pass
+    finally:
+        conn.close()
+    return fallback
+
+def save_db_setting(key, value_obj):
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        val_str = json.dumps(value_obj, ensure_ascii=False)
+        c.execute(f'''INSERT INTO site_settings (key, value) VALUES ({p}, {p})
+                      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value''', (key, val_str))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_config():
+    return get_db_setting('config', load_file_settings())
+
+def get_catalog():
+    return get_db_setting('catalog', DEFAULT_CATALOG)
+
+def get_public_config():
+    cfg = get_config()
+    return {
+        "shop_name": cfg.get("shop_name", "RED TEAM SHOP"),
+        "ticker_text": cfg.get("ticker_text", "Topup in seconds - Available 24/7!"),
+        "whatsapp_number": cfg.get("whatsapp_number", ""),
+        "support_hours": cfg.get("support_hours", "08:00 AM - 11:00 PM"),
+        "response_time": cfg.get("response_time", "< 5 minutes"),
+        "payment_methods": cfg.get("payment_methods", [])
+    }
+
+def is_admin_authorized():
+    cfg = get_config()
+    expected = os.environ.get("ADMIN_PASSWORD") or cfg.get("admin_password", "1234")
+    provided = request.headers.get("X-Admin-Password", "")
+    return bool(provided) and provided == str(expected)
+
+def mask_uid(uid):
+    s = str(uid or '').strip()
+    if len(s) <= 4:
+        return s[:1] + '**' + s[-1:] if len(s) > 2 else '****'
+    return s[:2] + '****' + s[-2:]
+
+def get_live_stats_data():
+    cfg = get_config()
+    offset = int(cfg.get("today_count_offset", 0) or 0)
+    today_prefix = datetime.now().strftime("%Y-%m-%d")
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT COUNT(*) AS cnt FROM orders WHERE created_at LIKE {p}", (today_prefix + '%',))
+        actual_today = int(c.fetchone()['cnt'])
+        c.execute("SELECT category, package_name, uid, status, created_at FROM orders ORDER BY id DESC LIMIT 12")
+        recent = []
+        for r in c.fetchall():
+            recent.append({
+                "category": r['category'],
+                "package_name": r['package_name'],
+                "masked_uid": mask_uid(r['uid']),
+                "status": r['status'],
+                "created_at": r['created_at']
+            })
+        return {
+            "today_count": max(0, actual_today + offset),
+            "actual_today": actual_today,
+            "recent": recent
+        }
     finally:
         conn.close()
 
@@ -157,7 +262,17 @@ def is_duplicate_trx(c, db_type, trx_id):
 @app.route('/')
 def home():
     init_db()
-    return render_template('index.html', shop_config=get_public_settings(), catalog=CATALOG)
+    return render_template(
+        'index.html',
+        shop_config=get_public_config(),
+        catalog=get_catalog(),
+        live_stats=get_live_stats_data()
+    )
+
+@app.route('/api/live-stats', methods=['GET'])
+def api_live_stats():
+    init_db()
+    return jsonify(get_live_stats_data())
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -184,7 +299,7 @@ def register():
         c.execute(f"INSERT INTO users (name, phone, password, balance, created_at) VALUES ({p}, {p}, {p}, 0, {p})",
                   (name, phone, hashed_pw, now))
         conn.commit()
-        c.execute(f"SELECT id, name, phone, balance FROM users WHERE phone = {p}", (phone,))
+        c.execute(f"SELECT id, name, phone, balance, created_at FROM users WHERE phone = {p}", (phone,))
         user = dict(c.fetchone())
         return jsonify({"success": True, "user": user})
     finally:
@@ -203,7 +318,7 @@ def login():
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
-        c.execute(f"SELECT id, name, phone, password, balance FROM users WHERE phone = {p}", (phone,))
+        c.execute(f"SELECT id, name, phone, password, balance, created_at FROM users WHERE phone = {p}", (phone,))
         row = c.fetchone()
         if not row:
             return jsonify({"success": False, "message": "ফোন নম্বর বা পাসওয়ার্ড ভুল!"}), 401
@@ -217,14 +332,19 @@ def login():
 
         if not valid and stored_pw == password:
             valid = True
-            # পুরোনো plain-text পাসওয়ার্ড অটোমেটিক হ্যাশ করা হচ্ছে
             c.execute(f"UPDATE users SET password = {p} WHERE id = {p}", (generate_password_hash(password), row['id']))
             conn.commit()
 
         if not valid:
             return jsonify({"success": False, "message": "ফোন নম্বর বা পাসওয়ার্ড ভুল!"}), 401
 
-        user = {"id": row['id'], "name": row['name'], "phone": row['phone'], "balance": row['balance']}
+        user = {
+            "id": row['id'],
+            "name": row['name'],
+            "phone": row['phone'],
+            "balance": row['balance'],
+            "created_at": row['created_at']
+        }
         return jsonify({"success": True, "user": user})
     finally:
         conn.close()
@@ -236,7 +356,7 @@ def get_user(user_id):
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
-        c.execute(f"SELECT id, name, phone, balance FROM users WHERE id = {p}", (user_id,))
+        c.execute(f"SELECT id, name, phone, balance, created_at FROM users WHERE id = {p}", (user_id,))
         row = c.fetchone()
         if not row:
             return jsonify({"success": False}), 404
@@ -311,15 +431,16 @@ def create_order():
     package_name = str(data.get('package_name', '')).strip()
     uid = str(data.get('uid', '')).strip()
     ign = str(data.get('ign', '')).strip()
+    region = str(data.get('region', 'BD')).strip()[:10]
     pay_method = str(data.get('payment_method', '')).strip()
     trx_id = str(data.get('trx_id', '')).strip()
     phone = str(data.get('phone', '')).strip()
 
     if not uid or not phone:
-        return jsonify({"success": False, "message": "Player UID এবং ফোন নম্বর দিন!"}), 400
+        return jsonify({"success": False, "message": "ID এবং ফোন নম্বর দিন!"}), 400
 
-    # সার্ভার থেকে আসল দাম যাচাই
-    matched_pkg = next((pkg for pkg in CATALOG.get(category, []) if pkg['name'] == package_name), None)
+    catalog = get_catalog()
+    matched_pkg = next((pkg for pkg in catalog.get(category, []) if pkg['name'] == package_name), None)
     if not matched_pkg:
         return jsonify({"success": False, "message": "সঠিক প্যাকেজ সিলেক্ট করুন!"}), 400
     price = int(matched_pkg['price'])
@@ -348,15 +469,15 @@ def create_order():
         now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
         if db_type == "postgres":
             query = f'''INSERT INTO orders
-                (user_id, category, package_name, price, uid, ign, payment_method, trx_id, phone, created_at)
-                VALUES ({', '.join([p]*10)}) RETURNING id'''
-            c.execute(query, (user_id, category, package_name, price, uid, ign, pay_method, trx_id, phone, now))
+                (user_id, category, package_name, price, uid, ign, region, payment_method, trx_id, phone, created_at)
+                VALUES ({', '.join([p]*11)}) RETURNING id'''
+            c.execute(query, (user_id, category, package_name, price, uid, ign, region, pay_method, trx_id, phone, now))
             order_id = c.fetchone()['id']
         else:
             query = f'''INSERT INTO orders
-                (user_id, category, package_name, price, uid, ign, payment_method, trx_id, phone, created_at)
-                VALUES ({', '.join([p]*10)})'''
-            c.execute(query, (user_id, category, package_name, price, uid, ign, pay_method, trx_id, phone, now))
+                (user_id, category, package_name, price, uid, ign, region, payment_method, trx_id, phone, created_at)
+                VALUES ({', '.join([p]*11)})'''
+            c.execute(query, (user_id, category, package_name, price, uid, ign, region, pay_method, trx_id, phone, now))
             order_id = c.lastrowid
 
         conn.commit()
@@ -378,26 +499,75 @@ def get_orders():
             c.execute(f"SELECT * FROM orders WHERE user_id = {p} ORDER BY id DESC", (int(user_id),))
             return jsonify([dict(row) for row in c.fetchall()])
         elif ids_param:
-            id_list = []
-            for x in ids_param.split(',')[:50]:
-                if x.strip().isdigit():
-                    id_list.append(int(x.strip()))
+            id_list = [int(x.strip()) for x in ids_param.split(',')[:50] if x.strip().isdigit()]
             if not id_list:
                 return jsonify([])
             placeholders = ', '.join([p] * len(id_list))
             c.execute(f"SELECT * FROM orders WHERE id IN ({placeholders}) ORDER BY id DESC", tuple(id_list))
             return jsonify([dict(row) for row in c.fetchall()])
-        else:
-            return jsonify([])
+        return jsonify([])
     finally:
         conn.close()
 
-# ---------------- ADMIN ROUTES ----------------
+@app.route('/api/reports', methods=['GET', 'POST'])
+def handle_reports():
+    init_db()
+    if request.method == 'POST':
+        data = request.json or {}
+        user_id = int(data.get('user_id') or 0)
+        phone = str(data.get('phone', '')).strip()
+        issue_type = str(data.get('issue_type', '')).strip()
+        order_id = str(data.get('order_id', '')).strip()
+        details = str(data.get('details', '')).strip()
+        if not issue_type or not details:
+            return jsonify({"success": False, "message": "সমস্যার ধরন এবং বিবরণ লিখুন!"}), 400
+
+        conn, db_type = get_connection()
+        try:
+            c = conn.cursor()
+            p = "%s" if db_type == "postgres" else "?"
+            now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            if db_type == "postgres":
+                c.execute(f'''INSERT INTO support_reports (user_id, phone, issue_type, order_id, details, created_at)
+                              VALUES ({p}, {p}, {p}, {p}, {p}, {p}) RETURNING id''',
+                          (user_id, phone, issue_type, order_id, details, now))
+                rep_id = c.fetchone()['id']
+            else:
+                c.execute(f'''INSERT INTO support_reports (user_id, phone, issue_type, order_id, details, created_at)
+                              VALUES ({p}, {p}, {p}, {p}, {p}, {p})''',
+                          (user_id, phone, issue_type, order_id, details, now))
+                rep_id = c.lastrowid
+            conn.commit()
+            return jsonify({"success": True, "report_id": rep_id, "message": "আপনার রিপোর্ট জমা দেওয়া হয়েছে!"})
+        finally:
+            conn.close()
+    else:
+        user_id = request.args.get('user_id')
+        ids_param = request.args.get('ids', '').strip()
+        conn, db_type = get_connection()
+        try:
+            c = conn.cursor()
+            p = "%s" if db_type == "postgres" else "?"
+            if user_id:
+                c.execute(f"SELECT * FROM support_reports WHERE user_id = {p} ORDER BY id DESC", (int(user_id),))
+                return jsonify([dict(r) for r in c.fetchall()])
+            elif ids_param:
+                id_list = [int(x.strip()) for x in ids_param.split(',')[:30] if x.strip().isdigit()]
+                if not id_list:
+                    return jsonify([])
+                placeholders = ', '.join([p] * len(id_list))
+                c.execute(f"SELECT * FROM support_reports WHERE id IN ({placeholders}) ORDER BY id DESC", tuple(id_list))
+                return jsonify([dict(r) for r in c.fetchall()])
+            return jsonify([])
+        finally:
+            conn.close()
 
 @app.route('/api/admin/verify', methods=['POST'])
 def admin_verify():
+    init_db()
     data = request.json or {}
-    expected = os.environ.get("ADMIN_PASSWORD") or load_settings().get("admin_password", "1234")
+    cfg = get_config()
+    expected = os.environ.get("ADMIN_PASSWORD") or cfg.get("admin_password", "1234")
     if str(data.get('password', '')) == str(expected):
         return jsonify({"success": True})
     return jsonify({"success": False, "message": "ভুল পাসওয়ার্ড!"}), 401
@@ -416,14 +586,17 @@ def admin_overview():
         pending_orders = c.fetchone()['cnt']
         c.execute("SELECT COUNT(*) AS cnt FROM wallet_requests WHERE status = 'Pending'")
         pending_wallet = c.fetchone()['cnt']
-        c.execute("SELECT id, name, phone, balance, created_at FROM users ORDER BY id DESC LIMIT 100")
+        c.execute("SELECT id, name, phone, balance, created_at FROM users ORDER BY id DESC LIMIT 150")
         users = [dict(r) for r in c.fetchall()]
+        stats = get_live_stats_data()
         return jsonify({
             "success": True,
             "db_type": db_type,
             "total_users": total_users,
             "pending_orders": pending_orders,
             "pending_wallet": pending_wallet,
+            "actual_today_orders": stats['actual_today'],
+            "displayed_today_orders": stats['today_count'],
             "users": users
         })
     finally:
@@ -452,6 +625,67 @@ def admin_get_wallet_requests():
         c = conn.cursor()
         c.execute("SELECT * FROM wallet_requests ORDER BY id DESC LIMIT 200")
         return jsonify([dict(r) for r in c.fetchall()])
+    finally:
+        conn.close()
+
+@app.route('/api/admin/user/balance', methods=['POST'])
+def admin_adjust_balance():
+    if not is_admin_authorized():
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    init_db()
+    data = request.json or {}
+    user_id = int(data.get('user_id', 0))
+    delta = int(data.get('delta', 0))
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"UPDATE users SET balance = GREATEST(0, balance + {p}) WHERE id = {p}" if db_type == "postgres"
+                  else f"UPDATE users SET balance = MAX(0, balance + {p}) WHERE id = {p}", (delta, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    finally:
+        conn.close()
+
+@app.route('/api/admin/settings', methods=['GET', 'POST'])
+def admin_settings():
+    if not is_admin_authorized():
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    init_db()
+    if request.method == 'GET':
+        return jsonify({"success": True, "config": get_config(), "catalog": get_catalog()})
+    else:
+        data = request.json or {}
+        if 'config' in data:
+            current_cfg = get_config()
+            new_cfg = data['config']
+            if not new_cfg.get('admin_password'):
+                new_cfg['admin_password'] = current_cfg.get('admin_password', '1234')
+            save_db_setting('config', new_cfg)
+        if 'catalog' in data:
+            save_db_setting('catalog', data['catalog'])
+        return jsonify({"success": True, "message": "সফলভাবে সেভ হয়েছে!"})
+
+@app.route('/api/admin/reports', methods=['GET', 'PATCH'])
+def admin_reports():
+    if not is_admin_authorized():
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    init_db()
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        if request.method == 'GET':
+            c.execute("SELECT * FROM support_reports ORDER BY id DESC LIMIT 100")
+            return jsonify([dict(r) for r in c.fetchall()])
+        else:
+            data = request.json or {}
+            rep_id = int(data.get('id', 0))
+            status = data.get('status', 'Resolved')
+            reply = str(data.get('admin_reply', '')).strip()
+            c.execute(f"UPDATE support_reports SET status = {p}, admin_reply = {p} WHERE id = {p}", (status, reply, rep_id))
+            conn.commit()
+            return jsonify({"success": True})
     finally:
         conn.close()
 
