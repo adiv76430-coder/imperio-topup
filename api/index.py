@@ -1,10 +1,8 @@
-# api/index.py
 import os
 import json
 import sqlite3
 import urllib.request
-import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -17,6 +15,10 @@ app = Flask(__name__, template_folder=TEMPLATE_DIR)
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 SQLITE_PATH = "/tmp/shop.db"
 _db_initialized = False
+BD_TZ = timezone(timedelta(hours=6))
+
+def bd_now():
+    return datetime.now(BD_TZ)
 
 DEFAULT_CATALOG = {
     'Diamonds': [
@@ -73,6 +75,9 @@ def load_file_settings():
         "today_count_offset": 0,
         "telegram_bot_token": "",
         "telegram_chat_id": "",
+        "notice_enabled": True,
+        "notice_title": "🔥 স্বাগতম RED TEAM SHOP-এ!",
+        "notice_text": "২৪ ঘণ্টা দ্রুত ডেলিভারি। অর্ডার করার পর ১-৫ মিনিট অপেক্ষা করুন। যেকোনো সমস্যায় Support ট্যাব থেকে মেসেজ দিন।",
         "support_hours": "08:00 AM - 11:00 PM (7 Days)",
         "response_time": "< 5 minutes",
         "payment_methods": [
@@ -213,7 +218,11 @@ def save_db_setting(key, value_obj):
         conn.close()
 
 def get_config():
-    return get_db_setting('config', load_file_settings())
+    base = load_file_settings()
+    saved = get_db_setting('config', {})
+    if isinstance(saved, dict):
+        base.update(saved)
+    return base
 
 def get_catalog():
     cat = get_db_setting('catalog', DEFAULT_CATALOG)
@@ -227,6 +236,9 @@ def get_public_config():
         "shop_name": cfg.get("shop_name", "RED TEAM SHOP"),
         "ticker_text": cfg.get("ticker_text", "Topup in seconds - Available 24/7!"),
         "whatsapp_number": cfg.get("whatsapp_number", ""),
+        "notice_enabled": bool(cfg.get("notice_enabled", True)),
+        "notice_title": cfg.get("notice_title", "🔥 স্বাগতম RED TEAM SHOP-এ!"),
+        "notice_text": cfg.get("notice_text", ""),
         "support_hours": cfg.get("support_hours", "08:00 AM - 11:00 PM"),
         "response_time": cfg.get("response_time", "< 5 minutes"),
         "payment_methods": cfg.get("payment_methods", [])
@@ -238,22 +250,33 @@ def is_admin_authorized():
     provided = request.headers.get("X-Admin-Password", "")
     return bool(provided) and provided == str(expected)
 
-def send_telegram_alert(message_text):
+def get_telegram_creds():
+    cfg = get_config()
+    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or cfg.get("telegram_bot_token") or "").strip()
+    chat_id = (os.environ.get("TELEGRAM_CHAT_ID") or cfg.get("telegram_chat_id") or "").strip()
+    return token, chat_id
+
+def tg_api_call(method, payload_dict):
+    token, _ = get_telegram_creds()
+    if not token:
+        return None
     try:
-        cfg = get_config()
-        token = (os.environ.get("TELEGRAM_BOT_TOKEN") or cfg.get("telegram_bot_token") or "").strip()
-        chat_id = (os.environ.get("TELEGRAM_CHAT_ID") or cfg.get("telegram_chat_id") or "").strip()
-        if not token or not chat_id:
-            return
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = urllib.parse.urlencode({
-            "chat_id": chat_id,
-            "text": message_text
-        }).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, method="POST")
-        urllib.request.urlopen(req, timeout=3)
+        url = f"https://api.telegram.org/bot{token}/{method}"
+        data = json.dumps(payload_dict).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            return json.loads(resp.read().decode("utf-8"))
     except Exception:
-        pass
+        return None
+
+def send_telegram_alert(message_text, buttons=None):
+    token, chat_id = get_telegram_creds()
+    if not token or not chat_id:
+        return
+    payload = {"chat_id": chat_id, "text": message_text}
+    if buttons:
+        payload["reply_markup"] = {"inline_keyboard": buttons}
+    tg_api_call("sendMessage", payload)
 
 def mask_uid(uid):
     s = str(uid or '').strip()
@@ -264,7 +287,7 @@ def mask_uid(uid):
 def get_live_stats_data():
     cfg = get_config()
     offset = int(cfg.get("today_count_offset", 0) or 0)
-    today_prefix = datetime.now().strftime("%Y-%m-%d")
+    today_prefix = bd_now().strftime("%Y-%m-%d")
     conn, db_type = get_connection()
     try:
         c = conn.cursor()
@@ -350,7 +373,7 @@ def register():
             return jsonify({"success": False, "message": "এই Gmail দিয়ে আগেই অ্যাকাউন্ট খোলা আছে!"}), 400
 
         hashed_pw = generate_password_hash(password)
-        now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        now = bd_now().strftime("%Y-%m-%d %I:%M %p")
         c.execute(f"INSERT INTO users (name, phone, email, password, balance, created_at) VALUES ({p}, NULL, {p}, {p}, 0, {p})",
                   (name, email, hashed_pw, now))
         conn.commit()
@@ -421,6 +444,60 @@ def get_user(user_id):
     finally:
         conn.close()
 
+@app.route('/api/user/update-profile', methods=['POST'])
+def update_user_profile():
+    init_db()
+    data = request.json or {}
+    user_id = int(data.get('user_id') or 0)
+    new_name = str(data.get('name', '')).strip()
+    old_pw = str(data.get('old_password', '')).strip()
+    new_pw = str(data.get('new_password', '')).strip()
+
+    if user_id <= 0 or not old_pw:
+        return jsonify({"success": False, "message": "বর্তমান পাসওয়ার্ড দিন!"}), 400
+    if new_pw and len(new_pw) < 4:
+        return jsonify({"success": False, "message": "নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে!"}), 400
+
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT id, name, phone, email, password, balance, created_at FROM users WHERE id = {p}", (user_id,))
+        row = c.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "ইউজার পাওয়া যায়নি!"}), 404
+
+        stored_pw = row['password'] or ''
+        valid = False
+        try:
+            valid = check_password_hash(stored_pw, old_pw)
+        except Exception:
+            valid = False
+        if not valid and stored_pw == old_pw:
+            valid = True
+
+        if not valid:
+            return jsonify({"success": False, "message": "বর্তমান পাসওয়ার্ড ভুল!"}), 401
+
+        final_name = new_name if new_name else row['name']
+        final_pw = generate_password_hash(new_pw) if new_pw else stored_pw
+        c.execute(f"UPDATE users SET name = {p}, password = {p} WHERE id = {p}", (final_name, final_pw, user_id))
+        conn.commit()
+        return jsonify({
+            "success": True,
+            "message": "প্রোফাইল সফলভাবে আপডেট হয়েছে!",
+            "user": {
+                "id": row['id'],
+                "name": final_name,
+                "phone": row['phone'],
+                "email": row['email'],
+                "balance": row['balance'],
+                "created_at": row['created_at']
+            }
+        })
+    finally:
+        conn.close()
+
 @app.route('/api/wallet/add', methods=['POST'])
 def add_wallet_request():
     init_db()
@@ -452,19 +529,30 @@ def add_wallet_request():
             return jsonify({"success": False, "message": "এই TrxID দিয়ে আগেই রিকোয়েস্ট করা হয়েছে!"}), 400
 
         contact = user['email'] or user['phone'] or ''
-        now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
-        c.execute(f'''INSERT INTO wallet_requests (user_id, user_name, phone, amount, method, trx_id, created_at)
-                      VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})''',
-                  (user['id'], user['name'], contact, amount, method, trx_id, now))
+        now = bd_now().strftime("%Y-%m-%d %I:%M %p")
+        if db_type == "postgres":
+            c.execute(f'''INSERT INTO wallet_requests (user_id, user_name, phone, amount, method, trx_id, created_at)
+                          VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}) RETURNING id''',
+                      (user['id'], user['name'], contact, amount, method, trx_id, now))
+            req_id = c.fetchone()['id']
+        else:
+            c.execute(f'''INSERT INTO wallet_requests (user_id, user_name, phone, amount, method, trx_id, created_at)
+                          VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})''',
+                      (user['id'], user['name'], contact, amount, method, trx_id, now))
+            req_id = c.lastrowid
         conn.commit()
 
         send_telegram_alert(
-            f"💰 NEW ADD MONEY REQUEST\n"
+            f"💰 ADD MONEY REQUEST #{req_id}\n"
             f"User: {user['name']} ({contact})\n"
             f"Amount: ৳{amount}\n"
             f"Method: {method}\n"
             f"TrxID: {trx_id}\n"
-            f"Time: {now}"
+            f"Time: {now}",
+            buttons=[[
+                {"text": "✅ Approve", "callback_data": f"wallet_Approved_{req_id}"},
+                {"text": "❌ Reject", "callback_data": f"wallet_Rejected_{req_id}"}
+            ]]
         )
         return jsonify({"success": True, "message": "Add Money রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যোগ করে দেবেন।"})
     finally:
@@ -541,7 +629,7 @@ def create_order():
             if is_duplicate_trx(c, db_type, trx_id):
                 return jsonify({"success": False, "message": "এই TrxID দিয়ে আগেই অর্ডার বা রিকোয়েস্ট করা হয়েছে!"}), 400
 
-        now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        now = bd_now().strftime("%Y-%m-%d %I:%M %p")
         if db_type == "postgres":
             query = f'''INSERT INTO orders
                 (user_id, category, package_name, price, uid, ign, region, payment_method, trx_id, phone, created_at)
@@ -565,7 +653,11 @@ def create_order():
             f"IGN: {ign or 'N/A'}\n"
             f"Payment: {pay_method} | Trx: {trx_id}\n"
             f"Customer: {contact_info}\n"
-            f"Time: {now}"
+            f"Time: {now}",
+            buttons=[[
+                {"text": "✅ Complete", "callback_data": f"order_Completed_{order_id}"},
+                {"text": "❌ Cancel", "callback_data": f"order_Cancelled_{order_id}"}
+            ]]
         )
         return jsonify({"success": True, "order_id": order_id, "message": f"অর্ডার #{order_id} সফলভাবে গ্রহণ করা হয়েছে!"})
     finally:
@@ -612,7 +704,7 @@ def handle_reports():
         try:
             c = conn.cursor()
             p = "%s" if db_type == "postgres" else "?"
-            now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+            now = bd_now().strftime("%Y-%m-%d %I:%M %p")
             if db_type == "postgres":
                 c.execute(f'''INSERT INTO support_reports (user_id, phone, issue_type, order_id, details, created_at)
                               VALUES ({p}, {p}, {p}, {p}, {p}, {p}) RETURNING id''',
@@ -655,6 +747,93 @@ def handle_reports():
             return jsonify([])
         finally:
             conn.close()
+
+@app.route('/api/telegram/webhook', methods=['POST'])
+def telegram_webhook():
+    init_db()
+    update = request.json or {}
+    cb = update.get("callback_query")
+    if not cb:
+        return jsonify({"ok": True})
+
+    _, expected_chat_id = get_telegram_creds()
+    msg = cb.get("message") or {}
+    chat_id = str((msg.get("chat") or {}).get("id", ""))
+    if not expected_chat_id or chat_id != str(expected_chat_id):
+        return jsonify({"ok": True})
+
+    data_str = cb.get("data", "")
+    parts = data_str.split("_", 2)
+    if len(parts) != 3:
+        return jsonify({"ok": True})
+
+    kind, new_status, item_id_str = parts
+    if not item_id_str.isdigit():
+        return jsonify({"ok": True})
+    item_id = int(item_id_str)
+
+    conn, db_type = get_connection()
+    result_note = ""
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+
+        if kind == "order" and new_status in ("Completed", "Cancelled"):
+            c.execute(f"SELECT * FROM orders WHERE id = {p}", (item_id,))
+            order_row = c.fetchone()
+            if not order_row:
+                result_note = "Order পাওয়া যায়নি"
+            elif order_row['status'] != 'Pending':
+                result_note = f"আগেই {order_row['status']} করা হয়েছে"
+            else:
+                c.execute(f"UPDATE orders SET status = {p} WHERE id = {p} AND status = 'Pending'", (new_status, item_id))
+                if c.rowcount == 1 and new_status == 'Cancelled' and order_row['payment_method'] == 'Wallet Balance' and int(order_row['user_id'] or 0) > 0:
+                    c.execute(f"UPDATE users SET balance = balance + {p} WHERE id = {p}",
+                              (int(order_row['price']), int(order_row['user_id'])))
+                conn.commit()
+                result_note = f"Status: {new_status}"
+
+        elif kind == "wallet" and new_status in ("Approved", "Rejected"):
+            c.execute(f"SELECT * FROM wallet_requests WHERE id = {p}", (item_id,))
+            req_row = c.fetchone()
+            if not req_row:
+                result_note = "Request পাওয়া যায়নি"
+            elif req_row['status'] != 'Pending':
+                result_note = f"আগেই {req_row['status']} করা হয়েছে"
+            else:
+                c.execute(f"UPDATE wallet_requests SET status = {p} WHERE id = {p} AND status = 'Pending'", (new_status, item_id))
+                if c.rowcount == 1 and new_status == 'Approved':
+                    c.execute(f"UPDATE users SET balance = balance + {p} WHERE id = {p}",
+                              (int(req_row['amount']), int(req_row['user_id'])))
+                conn.commit()
+                result_note = f"Status: {new_status}"
+    finally:
+        conn.close()
+
+    tg_api_call("answerCallbackQuery", {"callback_query_id": cb["id"], "text": result_note or "Done!"})
+    orig_text = msg.get("text", "")
+    icon = "✅" if new_status in ("Completed", "Approved") else "❌"
+    tg_api_call("editMessageText", {
+        "chat_id": chat_id,
+        "message_id": msg.get("message_id"),
+        "text": f"{orig_text}\n\n{icon} {result_note}",
+        "reply_markup": {"inline_keyboard": []}
+    })
+    return jsonify({"ok": True})
+
+@app.route('/api/admin/telegram/set-webhook', methods=['POST'])
+def admin_set_tg_webhook():
+    if not is_admin_authorized():
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    token, _ = get_telegram_creds()
+    if not token:
+        return jsonify({"success": False, "message": "আগে Telegram Bot Token সেভ করুন!"}), 400
+    base_url = request.url_root.replace("http://", "https://")
+    webhook_url = base_url + "api/telegram/webhook"
+    res = tg_api_call("setWebhook", {"url": webhook_url})
+    if res and res.get("ok"):
+        return jsonify({"success": True, "message": "Telegram বাটন সফলভাবে কানেক্ট হয়েছে!"})
+    return jsonify({"success": False, "message": "Telegram Webhook সেট করা যায়নি, Token চেক করুন!"}), 400
 
 @app.route('/api/admin/verify', methods=['POST'])
 def admin_verify():
