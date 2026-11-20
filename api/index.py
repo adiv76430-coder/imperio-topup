@@ -298,27 +298,57 @@ def send_otp_email(to_email, otp_code):
     cfg = get_config()
     smtp_email = (os.environ.get("SMTP_EMAIL") or cfg.get("smtp_email") or "").strip()
     smtp_pass = (os.environ.get("SMTP_APP_PASSWORD") or cfg.get("smtp_app_password") or "").replace(" ", "").strip()
-    shop_name = cfg.get("shop_name", "IMPERIO TOPUP")
+    shop_name = str(cfg.get("shop_name", "IMPERIO TOPUP")).strip()
+    safe_shop = shop_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     if not smtp_email or not smtp_pass:
         return False, "Admin Settings-এ Gmail SMTP Email ও App Password সেট করা নেই!"
 
     msg = EmailMessage()
-    msg["Subject"] = f"{shop_name} - Password Reset Code: {otp_code}"
-    msg["From"] = f"{shop_name} <{smtp_email}>"
+    msg["Subject"] = f"{shop_name} Verification Code"
+    msg["From"] = smtp_email
+    msg["Reply-To"] = smtp_email
     msg["To"] = to_email
     msg.set_content(
-        f"হ্যালো,\n\n"
-        f"আপনার {shop_name} অ্যাকাউন্টের পাসওয়ার্ড পরিবর্তন করার ভেরিফিকেশন কোড হলো: {otp_code}\n\n"
-        f"এই কোডটি ১০ মিনিটের জন্য কার্যকর থাকবে। আপনি রিকোয়েস্ট না করলে ইমেইলটি ইগনোর করুন।\n"
+        f"Hello,\n\n"
+        f"We received a request to reset your {shop_name} account password.\n"
+        f"Your 6-digit verification code is: {otp_code}\n\n"
+        f"This code will expire in 10 minutes.\n"
+        f"If you did not request this, you can safely ignore this email.\n"
     )
+    msg.add_alternative(f"""<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;background:#f4f6f5;padding:20px;color:#111827;">
+  <div style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;border:1px solid #e5e7eb;">
+    <h2 style="margin:0 0 12px;color:#0d7a4f;">{safe_shop}</h2>
+    <p style="font-size:14px;line-height:1.6;">Hello,<br>Use the verification code below to reset your account password:</p>
+    <div style="margin:18px 0;padding:14px;background:#ecfdf5;border:1px dashed #0d7a4f;border-radius:10px;text-align:center;font-size:26px;font-weight:bold;letter-spacing:6px;color:#0d7a4f;">
+      {otp_code}
+    </div>
+    <p style="font-size:12px;color:#6b7280;">This code is valid for 10 minutes. If you didn't request this, please ignore this email.</p>
+  </div>
+</body>
+</html>""", subtype="html")
+
+    last_err = ""
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(smtp_email, smtp_pass)
             server.send_message(msg)
         return True, "OK"
-    except Exception:
-        return False, "Gmail-এ কোড পাঠানো যায়নি! Admin Settings থেকে SMTP তথ্য চেক করুন।"
+    except Exception as e:
+        last_err = str(e)
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_email, smtp_pass)
+            server.send_message(msg)
+        return True, "OK"
+    except Exception as e2:
+        return False, f"Email Error: {e2 or last_err}"
 
 def mask_uid(uid):
     s = str(uid or '').strip()
@@ -575,7 +605,7 @@ def forgot_password_send_otp():
             (email, otp_code, now_ts + 600, now_str)
         )
         conn.commit()
-        return jsonify({"success": True, "message": f"{user['email']}-এ ৬ ডিজিটের কোড পাঠানো হয়েছে!"})
+        return jsonify({"success": True, "message": f"{user['email']}-এ ৬ ডিজিটের কোড পাঠানো হয়েছে! (Inbox-এ না পেলে Spam ফোল্ডার চেক করুন)"})
     finally:
         conn.close()
 
