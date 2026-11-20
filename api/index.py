@@ -1,7 +1,11 @@
 import os
 import json
+import time
+import secrets
+import smtplib
 import sqlite3
 import urllib.request
+from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -75,6 +79,8 @@ def load_file_settings():
         "today_count_offset": 0,
         "telegram_bot_token": "",
         "telegram_chat_id": "",
+        "smtp_email": "",
+        "smtp_app_password": "",
         "notice_enabled": True,
         "notice_title": "🔥 স্বাগতম RED TEAM SHOP-এ!",
         "notice_text": "২৪ ঘণ্টা দ্রুত ডেলিভারি। অর্ডার করার পর ১-৫ মিনিট অপেক্ষা করুন। যেকোনো সমস্যায় Support ট্যাব থেকে মেসেজ দিন।",
@@ -185,6 +191,16 @@ def init_db():
             created_at TEXT
         )''')
 
+        c.execute(f'''CREATE TABLE IF NOT EXISTS password_resets (
+            id {id_col},
+            email TEXT,
+            otp_code TEXT,
+            expires_ts BIGINT,
+            attempts INTEGER DEFAULT 0,
+            used INTEGER DEFAULT 0,
+            created_at TEXT
+        )''')
+
         conn.commit()
         _db_initialized = True
     finally:
@@ -277,6 +293,32 @@ def send_telegram_alert(message_text, buttons=None):
     if buttons:
         payload["reply_markup"] = {"inline_keyboard": buttons}
     tg_api_call("sendMessage", payload)
+
+def send_otp_email(to_email, otp_code):
+    cfg = get_config()
+    smtp_email = (os.environ.get("SMTP_EMAIL") or cfg.get("smtp_email") or "").strip()
+    smtp_pass = (os.environ.get("SMTP_APP_PASSWORD") or cfg.get("smtp_app_password") or "").replace(" ", "").strip()
+    shop_name = cfg.get("shop_name", "IMPERIO TOPUP")
+
+    if not smtp_email or not smtp_pass:
+        return False, "Admin Settings-এ Gmail SMTP Email ও App Password সেট করা নেই!"
+
+    msg = EmailMessage()
+    msg["Subject"] = f"{shop_name} - Password Reset Code: {otp_code}"
+    msg["From"] = f"{shop_name} <{smtp_email}>"
+    msg["To"] = to_email
+    msg.set_content(
+        f"হ্যালো,\n\n"
+        f"আপনার {shop_name} অ্যাকাউন্টের পাসওয়ার্ড পরিবর্তন করার ভেরিফিকেশন কোড হলো: {otp_code}\n\n"
+        f"এই কোডটি ১০ মিনিটের জন্য কার্যকর থাকবে। আপনি রিকোয়েস্ট না করলে ইমেইলটি ইগনোর করুন।\n"
+    )
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+            server.login(smtp_email, smtp_pass)
+            server.send_message(msg)
+        return True, "OK"
+    except Exception:
+        return False, "Gmail-এ কোড পাঠানো যায়নি! Admin Settings থেকে SMTP তথ্য চেক করুন।"
 
 def mask_uid(uid):
     s = str(uid or '').strip()
@@ -495,6 +537,91 @@ def update_user_profile():
                 "created_at": row['created_at']
             }
         })
+    finally:
+        conn.close()
+
+@app.route('/api/auth/forgot-password/send-otp', methods=['POST'])
+def forgot_password_send_otp():
+    init_db()
+    data = request.json or {}
+    email = str(data.get('email', '')).strip().lower()
+    if not email or '@' not in email:
+        return jsonify({"success": False, "message": "সঠিক Gmail লিখুন!"}), 400
+
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT id, name, email FROM users WHERE LOWER(email) = {p}", (email,))
+        user = c.fetchone()
+        if not user:
+            return jsonify({"success": False, "message": "এই Gmail দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি!"}), 404
+
+        now_ts = int(time.time())
+        c.execute(f"SELECT expires_ts FROM password_resets WHERE LOWER(email) = {p} AND used = 0 ORDER BY id DESC LIMIT 1", (email,))
+        last_otp = c.fetchone()
+        if last_otp and (int(last_otp['expires_ts']) - 600) > (now_ts - 60):
+            return jsonify({"success": False, "message": "অনুগ্রহ করে ১ মিনিট পর আবার কোড পাঠান!"}), 429
+
+        otp_code = str(secrets.randbelow(900000) + 100000)
+        ok, err_msg = send_otp_email(user['email'], otp_code)
+        if not ok:
+            return jsonify({"success": False, "message": err_msg}), 500
+
+        c.execute(f"UPDATE password_resets SET used = 1 WHERE LOWER(email) = {p} AND used = 0", (email,))
+        now_str = bd_now().strftime("%Y-%m-%d %I:%M %p")
+        c.execute(
+            f"INSERT INTO password_resets (email, otp_code, expires_ts, attempts, used, created_at) VALUES ({p}, {p}, {p}, 0, 0, {p})",
+            (email, otp_code, now_ts + 600, now_str)
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": f"{user['email']}-এ ৬ ডিজিটের কোড পাঠানো হয়েছে!"})
+    finally:
+        conn.close()
+
+@app.route('/api/auth/forgot-password/reset', methods=['POST'])
+def forgot_password_reset():
+    init_db()
+    data = request.json or {}
+    email = str(data.get('email', '')).strip().lower()
+    otp = str(data.get('otp', '')).strip()
+    new_pw = str(data.get('new_password', '')).strip()
+
+    if not email or not otp or not new_pw:
+        return jsonify({"success": False, "message": "Gmail, কোড এবং নতুন পাসওয়ার্ড দিন!"}), 400
+    if len(new_pw) < 4:
+        return jsonify({"success": False, "message": "নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে!"}), 400
+
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT * FROM password_resets WHERE LOWER(email) = {p} AND used = 0 ORDER BY id DESC LIMIT 1", (email,))
+        row = c.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "কোনো সক্রিয় কোড পাওয়া যায়নি! আবার কোড পাঠান।"}), 400
+
+        now_ts = int(time.time())
+        if now_ts > int(row['expires_ts']):
+            c.execute(f"UPDATE password_resets SET used = 1 WHERE id = {p}", (row['id'],))
+            conn.commit()
+            return jsonify({"success": False, "message": "কোডটির মেয়াদ শেষ হয়ে গেছে! আবার নতুন কোড নিন।"}), 400
+
+        if int(row['attempts'] or 0) >= 5:
+            c.execute(f"UPDATE password_resets SET used = 1 WHERE id = {p}", (row['id'],))
+            conn.commit()
+            return jsonify({"success": False, "message": "অনেকবার ভুল কোড দিয়েছেন! আবার নতুন কোড নিন।"}), 400
+
+        if otp != str(row['otp_code']):
+            c.execute(f"UPDATE password_resets SET attempts = attempts + 1 WHERE id = {p}", (row['id'],))
+            conn.commit()
+            return jsonify({"success": False, "message": "ভুল কোড দিয়েছেন!"}), 400
+
+        hashed_pw = generate_password_hash(new_pw)
+        c.execute(f"UPDATE users SET password = {p} WHERE LOWER(email) = {p}", (hashed_pw, email))
+        c.execute(f"UPDATE password_resets SET used = 1 WHERE id = {p}", (row['id'],))
+        conn.commit()
+        return jsonify({"success": True, "message": "পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে!"})
     finally:
         conn.close()
 
