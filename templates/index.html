@@ -337,9 +337,6 @@
                     <input type="text" id="trxInput" placeholder="টাকা পাঠানোর TrxID দিন">
                 </div>
 
-                <label>WhatsApp / ফোন নম্বর</label>
-                <input type="text" id="phoneInput" placeholder="017XXXXXXXX">
-
                 <button class="submit-btn" id="orderSubmitBtn" onclick="submitOrder()">🚀 অর্ডার কনফার্ম করুন</button>
             </div>
 
@@ -673,9 +670,6 @@
             document.getElementById('profName').innerText = currentUser.name;
             document.getElementById('profPhone').innerText = contact;
             document.getElementById('profBal').innerText = `৳${currentUser.balance}`;
-            if (!document.getElementById('phoneInput').value && currentUser.phone) {
-                document.getElementById('phoneInput').value = currentUser.phone;
-            }
         } else {
             hdrBtn.innerText = 'Login';
             hwText.innerText = 'লগইন করে ওয়ালেটে টাকা অ্যাড করুন';
@@ -944,9 +938,9 @@
         const ign = document.getElementById('ignInput').value.trim();
         const payMethod = selectedPayMode === 'Wallet Balance' ? 'Wallet Balance' : document.getElementById('payMethod').value;
         const trx = document.getElementById('trxInput').value.trim();
-        const phone = document.getElementById('phoneInput').value.trim();
+        const contact = currentUser ? (currentUser.email || currentUser.phone || '') : 'Guest';
 
-        if (!uid || !phone || (payMethod !== 'Wallet Balance' && !trx)) {
+        if (!uid || (payMethod !== 'Wallet Balance' && !trx)) {
             return alert("দয়া করে সব প্রয়োজনীয় তথ্য পূরণ করুন!");
         }
 
@@ -963,7 +957,7 @@
                     uid, ign, region: selectedRegion,
                     payment_method: payMethod,
                     trx_id: payMethod === 'Wallet Balance' ? 'WALLET' : trx,
-                    phone
+                    phone: contact
                 })
             });
             const data = await res.json();
@@ -1017,7 +1011,7 @@
                 </div>
                 <div>ID: <b>${esc(o.uid)}</b> (${esc(o.region || 'BD')})${o.ign ? ' • Name: ' + esc(o.ign) : ''}</div>
                 <div>Payment: <b>${esc(o.payment_method)}</b> (Trx: ${esc(o.trx_id)})</div>
-                <div>Phone: ${esc(o.phone)}</div>
+                <div>Customer: ${esc(o.phone)}</div>
                 <div style="color:var(--muted); font-size:11px; margin-top:4px;">${esc(o.created_at)}</div>
                 ${isAdmin && o.status === 'Pending' ? `
                     <div style="display:flex; gap:8px; margin-top:8px;">
@@ -1042,7 +1036,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: currentUser ? currentUser.id : 0,
-                    phone: currentUser ? (currentUser.email || currentUser.phone) : (document.getElementById('phoneInput').value.trim() || 'Guest'),
+                    phone: currentUser ? (currentUser.email || currentUser.phone || '') : 'Guest',
                     issue_type, order_id, details
                 })
             });
@@ -1310,6 +1304,10 @@
             <input type="text" id="cfgWhatsapp" value="${esc(cfg.whatsapp_number)}">
             <label>আজকের অর্ডার কাউন্ট বাড়াতে চাইলে (+ Offset দিন)</label>
             <input type="number" id="cfgOffset" value="${cfg.today_count_offset || 0}">
+            <label>Telegram Bot Token (@BotFather থেকে নিন)</label>
+            <input type="text" id="cfgTgToken" value="${esc(cfg.telegram_bot_token || '')}" placeholder="যেমন: 123456789:AAH...">
+            <label>Telegram Chat ID (@userinfobot থেকে নিন)</label>
+            <input type="text" id="cfgTgChatId" value="${esc(cfg.telegram_chat_id || '')}" placeholder="যেমন: 5123456789">
             <label>নতুন Admin Password (খালি রাখলে আগেরটাই থাকবে)</label>
             <input type="text" id="cfgAdminPass" placeholder="নতুন পাসওয়ার্ড">
             <label>পেমেন্ট নম্বরসমূহ:</label>
@@ -1348,6 +1346,8 @@
         adminConfigDraft.ticker_text = document.getElementById('cfgTicker').value.trim();
         adminConfigDraft.whatsapp_number = document.getElementById('cfgWhatsapp').value.trim();
         adminConfigDraft.today_count_offset = parseInt(document.getElementById('cfgOffset').value || '0', 10);
+        adminConfigDraft.telegram_bot_token = document.getElementById('cfgTgToken').value.trim();
+        adminConfigDraft.telegram_chat_id = document.getElementById('cfgTgChatId').value.trim();
         const newPw = document.getElementById('cfgAdminPass').value.trim();
         if (newPw) adminConfigDraft.admin_password = newPw;
 
@@ -1376,4 +1376,4 @@
     }
 </script>
 </body>
- </html>
+                        </html>
