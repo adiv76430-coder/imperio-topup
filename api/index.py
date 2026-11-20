@@ -1,4 +1,4 @@
-# api/index.py — (এটি GitHub-এ api/index.py ফাইলে সেভ করে আমাকে "2" লিখুন, তাহলে নতুন index.html দেব)
+# api/index.py — (এটি GitHub-এ api/index.py ফাইলে সেভ করে "2" লিখুন, তারপর নতুন index.html দেব)
 import os
 import json
 import sqlite3
@@ -109,10 +109,19 @@ def init_db():
             id {id_col},
             name TEXT,
             phone TEXT UNIQUE,
+            email TEXT,
             password TEXT,
             balance INTEGER DEFAULT 0,
             created_at TEXT
         )''')
+
+        if db_type == "postgres":
+            c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT")
+        else:
+            try:
+                c.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            except Exception:
+                pass
 
         c.execute(f'''CREATE TABLE IF NOT EXISTS wallet_requests (
             id {id_col},
@@ -277,7 +286,19 @@ def home():
         'index.html',
         shop_config=get_public_config(),
         catalog=get_catalog(),
-        live_stats=get_live_stats_data()
+        live_stats=get_live_stats_data(),
+        auto_admin=False
+    )
+
+@app.route('/admin')
+def secret_admin():
+    init_db()
+    return render_template(
+        'index.html',
+        shop_config=get_public_config(),
+        catalog=get_catalog(),
+        live_stats=get_live_stats_data(),
+        auto_admin=True
     )
 
 @app.route('/api/live-stats', methods=['GET'])
@@ -290,10 +311,12 @@ def register():
     init_db()
     data = request.json or {}
     name = data.get('name', '').strip()
-    phone = data.get('phone', '').strip()
+    email = data.get('email', '').strip().lower()
     password = data.get('password', '').strip()
-    if not name or not phone or not password:
-        return jsonify({"success": False, "message": "সব তথ্য সঠিকভাবে দিন!"}), 400
+    if not name or not email or not password:
+        return jsonify({"success": False, "message": "নাম, Gmail এবং পাসওয়ার্ড দিন!"}), 400
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        return jsonify({"success": False, "message": "সঠিক Gmail / Email লিখুন!"}), 400
     if len(password) < 4:
         return jsonify({"success": False, "message": "পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে!"}), 400
 
@@ -301,16 +324,16 @@ def register():
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
-        c.execute(f"SELECT id FROM users WHERE phone = {p}", (phone,))
+        c.execute(f"SELECT id FROM users WHERE LOWER(email) = {p}", (email,))
         if c.fetchone():
-            return jsonify({"success": False, "message": "এই নম্বর দিয়ে আগেই অ্যাকাউন্ট খোলা আছে!"}), 400
+            return jsonify({"success": False, "message": "এই Gmail দিয়ে আগেই অ্যাকাউন্ট খোলা আছে!"}), 400
 
         hashed_pw = generate_password_hash(password)
         now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
-        c.execute(f"INSERT INTO users (name, phone, password, balance, created_at) VALUES ({p}, {p}, {p}, 0, {p})",
-                  (name, phone, hashed_pw, now))
+        c.execute(f"INSERT INTO users (name, phone, email, password, balance, created_at) VALUES ({p}, NULL, {p}, {p}, 0, {p})",
+                  (name, email, hashed_pw, now))
         conn.commit()
-        c.execute(f"SELECT id, name, phone, balance, created_at FROM users WHERE phone = {p}", (phone,))
+        c.execute(f"SELECT id, name, phone, email, balance, created_at FROM users WHERE LOWER(email) = {p}", (email,))
         user = dict(c.fetchone())
         return jsonify({"success": True, "user": user})
     finally:
@@ -320,19 +343,20 @@ def register():
 def login():
     init_db()
     data = request.json or {}
-    phone = data.get('phone', '').strip()
+    identifier = (data.get('email') or data.get('phone') or '').strip()
     password = data.get('password', '').strip()
-    if not phone or not password:
-        return jsonify({"success": False, "message": "ফোন নম্বর এবং পাসওয়ার্ড দিন!"}), 400
+    if not identifier or not password:
+        return jsonify({"success": False, "message": "Gmail এবং পাসওয়ার্ড দিন!"}), 400
 
     conn, db_type = get_connection()
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
-        c.execute(f"SELECT id, name, phone, password, balance, created_at FROM users WHERE phone = {p}", (phone,))
+        c.execute(f"SELECT id, name, phone, email, password, balance, created_at FROM users WHERE LOWER(email) = {p} OR phone = {p}",
+                  (identifier.lower(), identifier))
         row = c.fetchone()
         if not row:
-            return jsonify({"success": False, "message": "ফোন নম্বর বা পাসওয়ার্ড ভুল!"}), 401
+            return jsonify({"success": False, "message": "Gmail বা পাসওয়ার্ড ভুল!"}), 401
 
         stored_pw = row['password'] or ''
         valid = False
@@ -347,12 +371,13 @@ def login():
             conn.commit()
 
         if not valid:
-            return jsonify({"success": False, "message": "ফোন নম্বর বা পাসওয়ার্ড ভুল!"}), 401
+            return jsonify({"success": False, "message": "Gmail বা পাসওয়ার্ড ভুল!"}), 401
 
         user = {
             "id": row['id'],
             "name": row['name'],
             "phone": row['phone'],
+            "email": row['email'],
             "balance": row['balance'],
             "created_at": row['created_at']
         }
@@ -367,7 +392,7 @@ def get_user(user_id):
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
-        c.execute(f"SELECT id, name, phone, balance, created_at FROM users WHERE id = {p}", (user_id,))
+        c.execute(f"SELECT id, name, phone, email, balance, created_at FROM users WHERE id = {p}", (user_id,))
         row = c.fetchone()
         if not row:
             return jsonify({"success": False}), 404
@@ -397,7 +422,7 @@ def add_wallet_request():
     try:
         c = conn.cursor()
         p = "%s" if db_type == "postgres" else "?"
-        c.execute(f"SELECT id, name, phone FROM users WHERE id = {p}", (user_id,))
+        c.execute(f"SELECT id, name, phone, email FROM users WHERE id = {p}", (user_id,))
         user = c.fetchone()
         if not user:
             return jsonify({"success": False, "message": "ইউজার পাওয়া যায়নি!"}), 404
@@ -405,10 +430,11 @@ def add_wallet_request():
         if is_duplicate_trx(c, db_type, trx_id):
             return jsonify({"success": False, "message": "এই TrxID দিয়ে আগেই রিকোয়েস্ট করা হয়েছে!"}), 400
 
+        contact = user['email'] or user['phone'] or ''
         now = datetime.now().strftime("%Y-%m-%d %I:%M %p")
         c.execute(f'''INSERT INTO wallet_requests (user_id, user_name, phone, amount, method, trx_id, created_at)
                       VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p})''',
-                  (user['id'], user['name'], user['phone'], amount, method, trx_id, now))
+                  (user['id'], user['name'], contact, amount, method, trx_id, now))
         conn.commit()
         return jsonify({"success": True, "message": "Add Money রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন চেক করে ব্যালেন্স যোগ করে দেবেন।"})
     finally:
@@ -597,7 +623,7 @@ def admin_overview():
         pending_orders = c.fetchone()['cnt']
         c.execute("SELECT COUNT(*) AS cnt FROM wallet_requests WHERE status = 'Pending'")
         pending_wallet = c.fetchone()['cnt']
-        c.execute("SELECT id, name, phone, balance, created_at FROM users ORDER BY id DESC LIMIT 150")
+        c.execute("SELECT id, name, phone, email, balance, created_at FROM users ORDER BY id DESC LIMIT 150")
         users = [dict(r) for r in c.fetchall()]
         stats = get_live_stats_data()
         return jsonify({
