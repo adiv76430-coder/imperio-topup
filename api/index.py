@@ -83,6 +83,9 @@ def load_file_settings():
         "smtp_email": "",
         "smtp_app_password": "",
         "google_client_id": "",
+        "ff_api_url": "",
+        "ff_api_key": "",
+        "ff_api_host": "",
         "notice_enabled": True,
         "notice_title": "🔥 স্বাগতম RED TEAM SHOP-এ!",
         "notice_text": "২৪ ঘণ্টা দ্রুত ডেলিভারি। অর্ডার করার পর ১-৫ মিনিট অপেক্ষা করুন। যেকোনো সমস্যায় Support ট্যাব থেকে মেসেজ দিন।",
@@ -353,6 +356,75 @@ def send_otp_email(to_email, otp_code):
     except Exception as e2:
         return False, f"Email Error: {e2 or last_err}"
 
+def extract_ff_name(obj, depth=0):
+    if depth > 4 or obj is None:
+        return ""
+    if isinstance(obj, dict):
+        priority_keys = ("nickname", "AccountName", "accountName", "player_name", "playerName", "ign", "username", "name")
+        lower_map = {str(k).lower(): v for k, v in obj.items()}
+        for pk in priority_keys:
+            val = lower_map.get(pk.lower())
+            if isinstance(val, str):
+                clean = val.strip()
+                if clean and clean.lower() not in ("true", "false", "ok", "success", "error", "not found", "null", "none"):
+                    return clean
+        for nested_key in ("basicinfo", "accountinfo", "player", "data", "result", "info"):
+            if nested_key in lower_map and isinstance(lower_map[nested_key], (dict, list)):
+                found = extract_ff_name(lower_map[nested_key], depth + 1)
+                if found:
+                    return found
+        for v in obj.values():
+            if isinstance(v, (dict, list)):
+                found = extract_ff_name(v, depth + 1)
+                if found:
+                    return found
+    elif isinstance(obj, list):
+        for item in obj[:5]:
+            found = extract_ff_name(item, depth + 1)
+            if found:
+                return found
+    return ""
+
+def compute_period_totals(rows, amount_key):
+    today = bd_now().date()
+    week_start = today - timedelta(days=6)
+    month_prefix = today.strftime("%Y-%m")
+    year_prefix = today.strftime("%Y")
+    week_tot = month_tot = year_tot = all_tot = 0
+    for r in rows:
+        amt = int(r[amount_key] or 0)
+        all_tot += amt
+        d_str = str(r['created_at'] or '')[:10]
+        if d_str.startswith(year_prefix):
+            year_tot += amt
+        if d_str.startswith(month_prefix):
+            month_tot += amt
+        try:
+            od = datetime.strptime(d_str, "%Y-%m-%d").date()
+            if od >= week_start:
+                week_tot += amt
+        except Exception:
+            pass
+    return {"week": week_tot, "month": month_tot, "year": year_tot, "all": all_tot}
+
+def get_account_stats(conn, db_type, user_id=None):
+    c = conn.cursor()
+    p = "%s" if db_type == "postgres" else "?"
+    if user_id is not None:
+        c.execute(f"SELECT price, created_at FROM orders WHERE user_id = {p} AND status != 'Cancelled'", (int(user_id),))
+        order_rows = c.fetchall()
+        c.execute(f"SELECT amount, created_at FROM wallet_requests WHERE user_id = {p} AND status = 'Approved'", (int(user_id),))
+        wallet_rows = c.fetchall()
+    else:
+        c.execute("SELECT price, created_at FROM orders WHERE status != 'Cancelled'")
+        order_rows = c.fetchall()
+        c.execute("SELECT amount, created_at FROM wallet_requests WHERE status = 'Approved'")
+        wallet_rows = c.fetchall()
+    return {
+        "purchase": compute_period_totals(order_rows, "price"),
+        "add_money": compute_period_totals(wallet_rows, "amount")
+    }
+
 def mask_uid(uid):
     s = str(uid or '').strip()
     if len(s) <= 4:
@@ -424,6 +496,58 @@ def secret_admin():
 def api_live_stats():
     init_db()
     return jsonify(get_live_stats_data())
+
+@app.route('/api/ff/check-uid', methods=['POST'])
+def check_ff_uid():
+    init_db()
+    data = request.json or {}
+    uid = str(data.get('uid', '')).strip()
+    region = str(data.get('region', 'BD')).strip() or 'BD'
+    if not uid.isdigit() or len(uid) < 6 or len(uid) > 14:
+        return jsonify({"success": False, "message": "সঠিক Free Fire UID লিখুন (৬–১৪ ডিজিট)!"}), 400
+
+    cfg = get_config()
+    api_url = (os.environ.get("FF_API_URL") or cfg.get("ff_api_url") or "").strip()
+    api_key = (os.environ.get("FF_API_KEY") or cfg.get("ff_api_key") or "").strip()
+    api_host = (os.environ.get("FF_API_HOST") or cfg.get("ff_api_host") or "").strip()
+
+    if api_url:
+        try:
+            if "{uid}" in api_url:
+                target_url = api_url.replace("{uid}", urllib.parse.quote(uid)).replace("{region}", urllib.parse.quote(region.lower()))
+            else:
+                sep = "&" if "?" in api_url else "?"
+                target_url = f"{api_url}{sep}uid={urllib.parse.quote(uid)}"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            if api_key and api_host:
+                headers["x-rapidapi-key"] = api_key
+                headers["x-rapidapi-host"] = api_host
+            elif api_key:
+                headers["x-api-key"] = api_key
+                headers["Authorization"] = f"Bearer {api_key}"
+            req = urllib.request.Request(target_url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, timeout=7) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            found = extract_ff_name(body)
+            if found:
+                return jsonify({"success": True, "name": found, "source": "api"})
+        except Exception:
+            pass
+
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT ign FROM orders WHERE TRIM(uid) = {p} AND TRIM(COALESCE(ign, '')) != '' ORDER BY id DESC LIMIT 1", (uid,))
+        row = c.fetchone()
+        if row and row['ign']:
+            return jsonify({"success": True, "name": str(row['ign']).strip(), "source": "history"})
+    finally:
+        conn.close()
+
+    if not api_url:
+        return jsonify({"success": False, "not_configured": True, "message": "API যুক্ত নেই — চাইলে নিচে নিজেই নাম লিখতে পারেন।"})
+    return jsonify({"success": False, "message": "এই UID-এর গেমের নাম পাওয়া যায়নি!"})
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -568,7 +692,11 @@ def get_user(user_id):
         row = c.fetchone()
         if not row:
             return jsonify({"success": False}), 404
-        return jsonify({"success": True, "user": dict(row)})
+        return jsonify({
+            "success": True,
+            "user": dict(row),
+            "account_stats": get_account_stats(conn, db_type, user_id)
+        })
     finally:
         conn.close()
 
@@ -1108,6 +1236,7 @@ def admin_overview():
         c.execute("SELECT id, name, phone, email, balance, created_at FROM users ORDER BY id DESC LIMIT 150")
         users = [dict(r) for r in c.fetchall()]
         stats = get_live_stats_data()
+        shop_stats = get_account_stats(conn, db_type, None)
         return jsonify({
             "success": True,
             "db_type": db_type,
@@ -1116,6 +1245,7 @@ def admin_overview():
             "pending_wallet": pending_wallet,
             "actual_today_orders": stats['actual_today'],
             "displayed_today_orders": stats['today_count'],
+            "shop_stats": shop_stats,
             "users": users
         })
     finally:
