@@ -6,6 +6,7 @@ import smtplib
 import sqlite3
 import urllib.request
 import urllib.parse
+import urllib.error
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
@@ -511,28 +512,63 @@ def check_ff_uid():
     api_key = (os.environ.get("FF_API_KEY") or cfg.get("ff_api_key") or "").strip()
     api_host = (os.environ.get("FF_API_HOST") or cfg.get("ff_api_host") or "").strip()
 
+    last_api_err = ""
     if api_url:
-        try:
-            if "{uid}" in api_url:
-                target_url = api_url.replace("{uid}", urllib.parse.quote(uid)).replace("{region}", urllib.parse.quote(region.lower()))
-            else:
-                sep = "&" if "?" in api_url else "?"
-                target_url = f"{api_url}{sep}uid={urllib.parse.quote(uid)}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            if api_key and api_host:
-                headers["x-rapidapi-key"] = api_key
-                headers["x-rapidapi-host"] = api_host
-            elif api_key:
-                headers["x-api-key"] = api_key
-                headers["Authorization"] = f"Bearer {api_key}"
-            req = urllib.request.Request(target_url, headers=headers, method="GET")
-            with urllib.request.urlopen(req, timeout=7) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            found = extract_ff_name(body)
-            if found:
-                return jsonify({"success": True, "name": found, "source": "api"})
-        except Exception:
-            pass
+        if "{uid}" in api_url:
+            base_target = api_url.replace("{uid}", urllib.parse.quote(uid)).replace("{region}", urllib.parse.quote(region.upper()))
+        else:
+            sep = "&" if "?" in api_url else "?"
+            base_target = f"{api_url}{sep}uid={urllib.parse.quote(uid)}&region={urllib.parse.quote(region.upper())}"
+
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        if api_key and api_host and ("rapidapi" in api_host.lower() or "." in api_host):
+            headers["x-rapidapi-key"] = api_key
+            headers["x-rapidapi-host"] = api_host
+        elif api_key:
+            headers["x-api-key"] = api_key
+            headers["x-secret-key"] = api_key
+            headers["Authorization"] = f"Bearer {api_key}"
+            if api_host:
+                headers["x-client-key"] = api_host
+                headers["client-key"] = api_host
+
+        attempts = [(base_target, "GET", None)]
+        if api_key:
+            q_extra = f"&key={urllib.parse.quote(api_key)}&secret={urllib.parse.quote(api_key)}"
+            if api_host and "." not in api_host:
+                q_extra += f"&client_key={urllib.parse.quote(api_host)}"
+            attempts.append((base_target + q_extra, "GET", None))
+
+        post_payload = {"uid": uid, "region": region.upper()}
+        if api_key:
+            post_payload["key"] = api_key
+            post_payload["secret"] = api_key
+            post_payload["secret_key"] = api_key
+        if api_host and "." not in api_host:
+            post_payload["client_key"] = api_host
+        attempts.append((api_url.split("?")[0], "POST", json.dumps(post_payload).encode("utf-8")))
+
+        for t_url, method, body_bytes in attempts:
+            try:
+                req_headers = dict(headers)
+                if body_bytes is not None:
+                    req_headers["Content-Type"] = "application/json"
+                req = urllib.request.Request(t_url, data=body_bytes, headers=req_headers, method=method)
+                with urllib.request.urlopen(req, timeout=7) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                found = extract_ff_name(body)
+                if found:
+                    return jsonify({"success": True, "name": found, "source": "api"})
+                if isinstance(body, dict) and (body.get("message") or body.get("error")):
+                    last_api_err = str(body.get("message") or body.get("error"))
+            except urllib.error.HTTPError as he:
+                try:
+                    err_txt = he.read().decode("utf-8", errors="ignore")[:160]
+                    last_api_err = f"HTTP {he.code}: {err_txt}"
+                except Exception:
+                    last_api_err = f"HTTP {he.code}"
+            except Exception as ex:
+                last_api_err = str(ex)
 
     conn, db_type = get_connection()
     try:
@@ -547,7 +583,10 @@ def check_ff_uid():
 
     if not api_url:
         return jsonify({"success": False, "not_configured": True, "message": "API যুক্ত নেই — চাইলে নিচে নিজেই নাম লিখতে পারেন।"})
-    return jsonify({"success": False, "message": "এই UID-এর গেমের নাম পাওয়া যায়নি!"})
+    msg_out = "এই UID-এর গেমের নাম পাওয়া যায়নি!"
+    if last_api_err:
+        msg_out += f" ({last_api_err})"
+    return jsonify({"success": False, "message": msg_out})
 
 @app.route('/api/register', methods=['POST'])
 def register():
