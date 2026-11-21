@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>{{ shop_config.shop_name }} - Top Up Center</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{--primary:#0d7a4f;--primary-soft:#ecfdf5;--primary-border:#34d399;--bg:#f4f6f5;--surface:#f8faf9;--card:#ffffff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--input-bg:#ffffff;--nav-bg:rgba(255,255,255,0.96)}
 body.dark{--bg:#0b0f0e;--surface:#111715;--card:#161e1b;--text:#f3f4f6;--muted:#9ca3af;--border:#24302b;--input-bg:#111715;--primary-soft:rgba(13,122,79,0.22);--nav-bg:rgba(22,30,27,0.96)}
@@ -90,6 +91,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 .pkg-name{font-size:12.5px;font-weight:700;margin-bottom:4px;color:var(--text)}
 .pkg-price{font-size:15px;font-weight:800;color:var(--primary)}
 .pkg-old{font-size:11px;color:#9ca3af;text-decoration:line-through;margin-left:4px}
+.pkg-qty-row{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:9px;padding-top:8px;border-top:1px dashed var(--primary-border)}
+.pkg-qty-btn{width:26px;height:26px;border-radius:8px;border:none;background:var(--primary);color:#fff;font-weight:800;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pkg-qty-inp{width:46px !important;margin:0 !important;padding:2px 4px !important;text-align:center;font-size:13px !important;font-weight:800;border-radius:8px !important;height:26px}
+.selected-summary-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:9px 11px;margin-bottom:8px;font-size:12px;line-height:1.6}
 .pay-cards-wrap{display:grid;gap:9px;margin-bottom:12px}
 .pay-card{border:1.5px solid var(--border);border-radius:14px;padding:12px 13px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;background:var(--card);transition:.15s}
 .pay-card.active{border-color:var(--primary);background:var(--primary-soft)}
@@ -108,6 +113,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 .submit-btn{width:100%;background:var(--primary);color:#fff;border:none;padding:13px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
 .submit-btn:disabled{opacity:0.6;cursor:not-allowed}
 .btn-outline{width:100%;background:var(--card);color:var(--text);border:1.5px solid var(--border);padding:11px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px}
+.google-card-btn{width:100%;background:var(--card);color:var(--text);border:1.5px solid var(--border);padding:11px 14px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-weight:700;font-size:13.5px}
+.or-divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase}
+.or-divider::before,.or-divider::after{content:"";flex:1;height:1px;background:var(--border)}
 .wp-btn{width:100%;background:#16a34a;color:#fff;border:none;padding:13px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;display:flex;justify-content:center;align-items:center;gap:8px}
 .order-item{border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:10px;font-size:12.5px;background:var(--card)}
 .status{padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700}
@@ -170,9 +178,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 <div class="section">
 <div id="guildGuideCard" class="form-card hidden"><h3>🏆 Before You Buy Guild Glory</h3><div class="guide-box"><div class="guide-mock"><div class="guide-row"><span>APPROVAL METHOD</span><b style="color:#4ade80;">AUTO APPROVAL: ON ✓</b></div><div class="guide-row"><span>LV / BR-RANKED / CS-RANKED</span><span>DEFAULT</span></div></div><ul class="guide-list"><li>আপনার গিল্ডে বট ঢোকার জন্য পর্যাপ্ত খালি জায়গা রাখুন।</li><li>Auto Approval চালু থাকলে বট অটোমেটিক জয়েন করবে।</li><li>Guild Join Requirements সব Default সেট করুন।</li></ul></div></div>
 <div class="form-card"><h3><span class="step-num">1</span> <span id="step1Title">Player Info</span></h3><label id="uidLabel">Player UID</label><div class="verify-row"><input type="text" id="uidInput" placeholder="Free Fire UID দিন" oninput="resetGuildVerify()"><button type="button" id="verifyGuildBtn" class="verify-btn hidden" onclick="verifyGuildId()">Verify</button></div><div id="verifyHelperText" class="hidden" style="font-size:11px;color:var(--muted);margin-bottom:10px;">Click Verify to confirm your guild ID before launching bots.</div><div id="ignGroup"><label>In-Game Name (ঐচ্ছিক)</label><input type="text" id="ignInput" placeholder="গেমের নাম" style="margin-bottom:0;"></div></div>
-<div class="form-card"><h3><span class="step-num">2</span> <span id="step2Title">Select Package</span></h3><div id="guildExtraBox" class="guide-box hidden"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:4px;">BEFORE YOU BUY GUILD GLORY:</div><ul class="guide-list"><li>Bots add 100k–600k glory (depends on luck)</li><li>Bots play in your guild for 8 hours (1 Squad = 4 Bots)</li></ul></div>
+<div class="form-card"><h3><span class="step-num">2</span> <span id="step2Title">Select Package</span></h3><div style="font-size:11px;color:var(--muted);margin:-6px 0 8px;">একাধিক প্যাকেজ বা −/+ চেপে যেকোনো পরিমাণ (১০–১৫টি+) নিতে পারবেন</div><div id="guildExtraBox" class="guide-box hidden"><div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:4px;">BEFORE YOU BUY GUILD GLORY:</div><ul class="guide-list"><li>Bots add 100k–600k glory (depends on luck)</li><li>Bots play in your guild for 8 hours (1 Squad = 4 Bots)</li></ul></div>
 <div class="pkg-grid" id="pkgGrid"></div>
-<div class="launch-price-row"><div><small style="font-size:10px;font-weight:700;color:var(--muted);display:block;">PACKAGE PRICE</small><div class="launch-price-val" id="selectedPriceDisplay">৳0.00</div></div><span class="verify-pill hidden" id="guildVerifyBadge">Guild ID: Not verified</span></div>
+<div id="selectedSummaryBox" class="selected-summary-box hidden"></div>
+<div class="launch-price-row"><div><small style="font-size:10px;font-weight:700;color:var(--muted);display:block;" id="selectedTotalLabel">TOTAL PRICE</small><div class="launch-price-val" id="selectedPriceDisplay">৳0.00</div></div><span class="verify-pill hidden" id="guildVerifyBadge">Guild ID: Not verified</span></div>
 <div id="regionGroup" class="hidden"><label>SELECT REGION</label><div class="region-grid" id="regionGrid"><div class="region-box active" onclick="selectRegion(this,'BD')"><b>BD</b><small>Bangladesh</small></div><div class="region-box" onclick="selectRegion(this,'SG')"><b>SG</b><small>Singapore</small></div><div class="region-box" onclick="selectRegion(this,'IN')"><b>IN</b><small>India</small></div><div class="region-box" onclick="selectRegion(this,'PK')"><b>PK</b><small>Pakistan</small></div><div class="region-box" onclick="selectRegion(this,'EU')"><b>EU</b><small>Europe</small></div><div class="region-box" onclick="selectRegion(this,'TH')"><b>TH</b><small>Thailand</small></div><div class="region-box" onclick="selectRegion(this,'RU')"><b>RU</b><small>Russia</small></div><div class="region-box" onclick="selectRegion(this,'VN')"><b>VN</b><small>Vietnam</small></div><div class="region-box" onclick="selectRegion(this,'IND')"><b>IND</b><small>Indonesia</small></div></div></div>
 <label style="margin-top:6px;">PAYMENT METHOD</label>
 <div class="pay-cards-wrap"><div class="pay-card" id="payCardWallet" onclick="selectPayMode('Wallet Balance')"><div class="pay-card-left"><div class="pay-card-ico">💳</div><div><div class="pay-card-title">Wallet Balance</div><div class="pay-card-sub" id="orderWalletBalCard">৳0.00 (লগইন করুন)</div></div></div><div class="pay-check">✓</div></div><div class="pay-card active" id="payCardMfs" onclick="selectPayMode('MFS')"><div class="pay-card-left"><div class="pay-card-ico">📱</div><div><div class="pay-card-title">MFS - Mobile Payment</div><div class="pay-card-sub">bKash / Nagad / Rocket</div></div></div><div class="pay-check">✓</div></div></div>
@@ -199,7 +208,26 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)}
 </div></div>
 
 <div id="accountView" class="hidden"><div class="section">
-<div id="authBox" class="form-card"><div class="tab-pills"><div class="tab-pill active" id="tabLoginBtn" onclick="toggleAuthMode('login')">Login</div><div class="tab-pill" id="tabRegBtn" onclick="toggleAuthMode('register')">Sign Up</div></div><div id="regNameGroup" class="hidden"><label>আপনার নাম</label><input type="text" id="authName" placeholder="আপনার পুরো নাম"></div><label>Gmail / Email</label><input type="email" id="authEmail" placeholder="example@gmail.com"><label>পাসওয়ার্ড</label><input type="password" id="authPass" placeholder="পাসওয়ার্ড দিন"><button class="submit-btn" id="authSubmitBtn" onclick="submitAuth()">Login</button><div id="forgotLoginLinkWrap" style="text-align:right;margin-top:10px;"><button type="button" onclick="openForgotModal(document.getElementById('authEmail').value.trim())" style="background:none;border:none;color:var(--primary);font-size:12.5px;font-weight:700;cursor:pointer;">পাসওয়ার্ড ভুলে গেছেন?</button></div></div>
+<div id="authBox" class="form-card">
+  <div style="text-align:center;margin-bottom:12px;">
+    <h3 style="justify-content:center;margin-bottom:3px;">🔐 অ্যাকাউন্টে প্রবেশ করুন</h3>
+    <p style="font-size:12px;color:var(--muted);">এক ক্লিকে ফোনের Gmail দিয়ে অথবা পাসওয়ার্ড দিয়ে খুলুন</p>
+  </div>
+  <div id="googleSignInArea" style="display:flex;flex-direction:column;align-items:center;">
+    <div id="googleBtnWrap" style="display:flex;justify-content:center;width:100%;"></div>
+    <button type="button" id="googleFallbackBtn" class="google-card-btn" onclick="handleGoogleFallbackTap()">
+      <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:18px;font-weight:800;color:#4285F4;">G</span><span>Continue with Google</span></span>
+      <span>→</span>
+    </button>
+  </div>
+  <div class="or-divider">OR CONTINUE WITH EMAIL</div>
+  <div class="tab-pills"><div class="tab-pill active" id="tabLoginBtn" onclick="toggleAuthMode('login')">Login</div><div class="tab-pill" id="tabRegBtn" onclick="toggleAuthMode('register')">Sign Up</div></div>
+  <div id="regNameGroup" class="hidden"><label>আপনার নাম</label><input type="text" id="authName" placeholder="আপনার পুরো নাম"></div>
+  <label>Gmail / Email</label><input type="email" id="authEmail" placeholder="example@gmail.com">
+  <label>পাসওয়ার্ড</label><input type="password" id="authPass" placeholder="পাসওয়ার্ড দিন">
+  <button class="submit-btn" id="authSubmitBtn" onclick="submitAuth()">Login</button>
+  <div id="forgotLoginLinkWrap" style="text-align:right;margin-top:10px;"><button type="button" onclick="openForgotModal(document.getElementById('authEmail').value.trim())" style="background:none;border:none;color:var(--primary);font-size:12.5px;font-weight:700;cursor:pointer;">পাসওয়ার্ড ভুলে গেছেন?</button></div>
+</div>
 <div id="profileBox" class="hidden"><div class="hero-card"><span class="badge-glass">MY ACCOUNT</span><h1 id="profName">User</h1><p id="profPhone">example@gmail.com</p></div><div class="form-card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div><small style="color:var(--muted);font-weight:700;">WALLET BALANCE</small><h2 id="profBal" style="color:var(--primary);">৳0</h2></div><button class="btn-primary-sm" onclick="switchTab('wallet')">+ Add Money</button></div><button class="btn-outline" onclick="switchTab('orders')">🧾 Transaction / Order History</button><button class="btn-outline" onclick="switchTab('support')">🎧 Customer Support</button><button class="btn-outline" onclick="document.getElementById('editProfileCard').classList.toggle('hidden')">🔐 নাম / পাসওয়ার্ড পরিবর্তন</button><button class="submit-btn" onclick="logoutUser()" style="background:#ef4444;margin-top:10px;">Logout</button></div>
 <div id="editProfileCard" class="form-card hidden"><h3>🔐 প্রোফাইল আপডেট করুন</h3><label>নতুন নাম (বদলাতে চাইলে)</label><input type="text" id="editProfName" placeholder="আপনার নাম"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><label style="margin:0;">বর্তমান পাসওয়ার্ড (আবশ্যক)</label><button type="button" onclick="openForgotModal(currentUser ? (currentUser.email || '') : '')" style="background:none;border:none;color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;">Forgot Password? (Gmail কোড)</button></div><input type="password" id="editOldPass" placeholder="বর্তমান পাসওয়ার্ড দিন"><label>নতুন পাসওয়ার্ড (বদলাতে চাইলে)</label><input type="password" id="editNewPass" placeholder="নতুন পাসওয়ার্ড দিন"><button class="submit-btn" onclick="updateProfile()">আপডেট সেভ করুন</button></div></div>
 </div></div>
@@ -232,8 +260,8 @@ let catalog={{ catalog | tojson }};
 let liveStats={{ live_stats | tojson }};
 const AUTO_ADMIN={{ auto_admin | tojson }};
 let currentUser=JSON.parse(localStorage.getItem('redteam_user')||'null');
-let authMode='login',currentCategory='Diamonds',selectedPackage=null,selectedRegion='BD',selectedPayMode='MFS',guildVerified=false;
-let adminPass='',adminConfigDraft=null,adminCatalogDraft=null,adminUsersCache=[],logoTapCount=0,logoTapTimer=null;
+let authMode='login',currentCategory='Diamonds',selectedQtyMap={},selectedRegion='BD',selectedPayMode='MFS',guildVerified=false;
+let adminPass='',adminConfigDraft=null,adminCatalogDraft=null,adminUsersCache=[],logoTapCount=0,logoTapTimer=null,googleInitedFor='';
 
 function handleSecretLogoTap(){logoTapCount++;clearTimeout(logoTapTimer);logoTapTimer=setTimeout(()=>{logoTapCount=0},2200);if(logoTapCount>=5){logoTapCount=0;openAdminPanel()}}
 function isGloryCat(c){return c==='GUILD GLORY BOT'}
@@ -263,6 +291,39 @@ document.getElementById('addMethod').innerHTML=opt;
 const nums=methods.map(m=>`<div class="pay-row"><span>${esc(m.name.split(' ')[0])}: <b>${esc(m.number)}</b></span><button type="button" class="copy-mini" onclick="copyText('${esc(m.number)}')">Copy</button></div>`).join('');
 document.getElementById('orderPayNumbers').innerHTML=nums;
 document.getElementById('walletPayNumbers').innerHTML=nums;
+initGoogleSignIn();
+}
+
+function initGoogleSignIn(retry=0){
+const area=document.getElementById('googleSignInArea'),wrap=document.getElementById('googleBtnWrap'),fallback=document.getElementById('googleFallbackBtn');
+const cid=(SHOP_CONFIG.google_client_id||'').trim();
+if(!area||!wrap||!fallback)return;
+if(!cid){wrap.innerHTML='';fallback.classList.remove('hidden');return}
+if(window.google&&google.accounts&&google.accounts.id){
+fallback.classList.add('hidden');
+if(googleInitedFor!==cid){google.accounts.id.initialize({client_id:cid,callback:handleGoogleCredential});googleInitedFor=cid}
+wrap.innerHTML='';
+const w=Math.min(340,Math.max(240,(area.clientWidth||320)-4));
+google.accounts.id.renderButton(wrap,{theme:'outline',size:'large',text:'continue_with',shape:'pill',width:w});
+}else if(retry<15){
+fallback.classList.remove('hidden');
+setTimeout(()=>initGoogleSignIn(retry+1),400);
+}}
+
+function handleGoogleFallbackTap(){
+const cid=(SHOP_CONFIG.google_client_id||'').trim();
+if(!cid)return alert("Admin Settings-এ Google Client ID সেট করা নেই!");
+initGoogleSignIn();
+alert("Google Sign-In লোড হচ্ছে, কয়েক সেকেন্ড পর আবার চাপুন।");
+}
+
+async function handleGoogleCredential(response){
+try{
+const r=await fetch('/api/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:response.credential})});
+const d=await r.json();
+if(d.success){currentUser=d.user;localStorage.setItem('redteam_user',JSON.stringify(currentUser));updateUI();alert(`স্বাগতম ${d.user.name}!`);switchTab('home')}
+else alert(d.message||'Google লগইন ব্যর্থ হয়েছে!');
+}catch(e){alert('সার্ভারে সমস্যা হয়েছে!')}
 }
 
 function renderLiveStats(){
@@ -313,7 +374,7 @@ if(tab==='home'){document.getElementById('homeView').classList.remove('hidden');
 else if(tab==='wallet'){document.getElementById('walletView').classList.remove('hidden');document.getElementById('nav-wallet').classList.add('active');refreshUser();if(currentUser)loadMyWalletHistory()}
 else if(tab==='orders'){document.getElementById('ordersView').classList.remove('hidden');document.getElementById('nav-orders').classList.add('active');loadOrders(false)}
 else if(tab==='support'){document.getElementById('supportView').classList.remove('hidden');document.getElementById('nav-support').classList.add('active');loadMyReports()}
-else if(tab==='account'){document.getElementById('accountView').classList.remove('hidden');document.getElementById('nav-account').classList.add('active');refreshUser()}
+else if(tab==='account'){document.getElementById('accountView').classList.remove('hidden');document.getElementById('nav-account').classList.add('active');refreshUser();initGoogleSignIn()}
 }
 
 function copyText(num){if(navigator.clipboard)navigator.clipboard.writeText(num);alert(num+" কপি করা হয়েছে!")}
@@ -341,7 +402,7 @@ const d=await r.json();alert(d.message);
 if(d.success){currentUser=d.user;localStorage.setItem('redteam_user',JSON.stringify(currentUser));document.getElementById('editOldPass').value='';document.getElementById('editNewPass').value='';document.getElementById('editProfileCard').classList.add('hidden');updateUI()}
 }
 
-function logoutUser(){currentUser=null;localStorage.removeItem('redteam_user');updateUI();alert("লগআউট সম্পন্ন হয়েছে।")}
+function logoutUser(){currentUser=null;localStorage.removeItem('redteam_user');updateUI();initGoogleSignIn();alert("লগআউট সম্পন্ন হয়েছে।")}
 
 async function submitAddMoney(){
 const amount=document.getElementById('addAmount').value.trim(),method=document.getElementById('addMethod').value,trx=document.getElementById('addTrx').value.trim();
@@ -362,6 +423,59 @@ function resetGuildVerify(){guildVerified=false;const b=document.getElementById(
 function verifyGuildId(){const v=document.getElementById('uidInput').value.trim();if(!/^\d{6,14}$/.test(v))return alert("সঠিক Numeric Guild ID দিন (৬ থেকে ১৪ ডিজিট)!");guildVerified=true;const b=document.getElementById('guildVerifyBadge');b.classList.add('ok');b.innerText=`✓ Verified: ${v}`}
 function selectPayMode(m){selectedPayMode=m;const w=m==='Wallet Balance';document.getElementById('payCardWallet').classList.toggle('active',w);document.getElementById('payCardMfs').classList.toggle('active',!w);document.getElementById('orderMobilePayBox').classList.toggle('hidden',w)}
 
+function renderPkgGrid(cat){
+const grid=document.getElementById('pkgGrid');grid.innerHTML='';
+const items=catalog[cat]||[];
+items.forEach((item,idx)=>{
+const qty=selectedQtyMap[item.name]||0;
+const d=document.createElement('div');
+d.className='pkg-box'+(qty>0?' active':'');
+d.innerHTML=`<span class="save-badge">Save ৳${item.save}</span><div class="pkg-name">${esc(item.name)}</div><div><span class="pkg-price">৳${item.price}</span><span class="pkg-old">৳${item.old}</span></div>${qty>0?`<div class="pkg-qty-row" onclick="event.stopPropagation()"><button type="button" class="pkg-qty-btn" onclick="changePkgQty(${idx},-1)">−</button><input type="number" min="1" max="100" value="${qty}" class="pkg-qty-inp" oninput="setPkgQty(${idx},this.value)" onblur="fixPkgQty(${idx},this.value)"><button type="button" class="pkg-qty-btn" onclick="changePkgQty(${idx},1)">+</button></div>`:''}`;
+d.onclick=()=>{
+if((selectedQtyMap[item.name]||0)>0)selectedQtyMap[item.name]=0;
+else selectedQtyMap[item.name]=1;
+renderPkgGrid(cat);updateSelectedSummary();
+};
+grid.appendChild(d);
+});
+}
+
+function changePkgQty(idx,delta){
+const items=catalog[currentCategory]||[];const item=items[idx];if(!item)return;
+const next=Math.min(100,Math.max(0,(selectedQtyMap[item.name]||0)+delta));
+selectedQtyMap[item.name]=next;
+renderPkgGrid(currentCategory);updateSelectedSummary();
+}
+
+function setPkgQty(idx,val){
+const items=catalog[currentCategory]||[];const item=items[idx];if(!item)return;
+if(val==='')return;
+const n=Math.min(100,Math.max(1,parseInt(val,10)||1));
+selectedQtyMap[item.name]=n;
+updateSelectedSummary();
+}
+
+function fixPkgQty(idx,val){
+const items=catalog[currentCategory]||[];const item=items[idx];if(!item)return;
+const n=Math.min(100,Math.max(1,parseInt(val,10)||1));
+selectedQtyMap[item.name]=n;
+renderPkgGrid(currentCategory);updateSelectedSummary();
+}
+
+function updateSelectedSummary(){
+const items=catalog[currentCategory]||[];
+let total=0,totalQty=0,lines=[];
+items.forEach(item=>{
+const q=selectedQtyMap[item.name]||0;
+if(q>0){total+=item.price*q;totalQty+=q;lines.push(`<div><b>${esc(item.name)}</b> × ${q} = <b style="color:var(--primary);">৳${item.price*q}</b></div>`)}
+});
+document.getElementById('selectedPriceDisplay').innerText=`৳${total}.00`;
+document.getElementById('selectedTotalLabel').innerText=totalQty>1?`TOTAL PRICE (${totalQty} টি আইটেম)`:'PACKAGE PRICE';
+const box=document.getElementById('selectedSummaryBox');
+if(lines.length>0&&(lines.length>1||totalQty>1)){box.innerHTML=lines.join('');box.classList.remove('hidden')}
+else box.classList.add('hidden');
+}
+
 function openCategory(cat){
 currentCategory=cat;selectedRegion='BD';guildVerified=false;document.getElementById('ignInput').value='';
 document.getElementById('homeView').classList.add('hidden');document.getElementById('mainHeader').classList.add('hidden');document.getElementById('orderView').classList.remove('hidden');
@@ -375,12 +489,10 @@ document.getElementById('uidInput').placeholder=isG?'Enter your Guild ID':isE?'G
 document.getElementById('step2Title').innerText=isG?'Send a squad of bots to my guild':isE?'Select Emote Bot Package':isL?'Like Packages':'Select Package';
 document.getElementById('orderSubmitBtn').innerText=isG?'🚀 Send bots to my guild':'🚀 অর্ডার কনফার্ম করুন';
 resetGuildVerify();
-const grid=document.getElementById('pkgGrid');grid.innerHTML='';const items=catalog[cat]||[];selectedPackage=items[0]||null;
-document.getElementById('selectedPriceDisplay').innerText=selectedPackage?`৳${selectedPackage.price}.00`:'৳0.00';
-items.forEach((item,idx)=>{const d=document.createElement('div');d.className='pkg-box'+(idx===0?' active':'');
-d.innerHTML=`<span class="save-badge">Save ৳${item.save}</span><div class="pkg-name">${esc(item.name)}</div><div><span class="pkg-price">৳${item.price}</span><span class="pkg-old">৳${item.old}</span></div>`;
-d.onclick=()=>{document.querySelectorAll('.pkg-box').forEach(b=>b.classList.remove('active'));d.classList.add('active');selectedPackage=item;document.getElementById('selectedPriceDisplay').innerText=`৳${item.price}.00`};
-grid.appendChild(d)});
+selectedQtyMap={};
+const items=catalog[cat]||[];
+if(items.length>0)selectedQtyMap[items[0].name]=1;
+renderPkgGrid(cat);updateSelectedSummary();
 selectPayMode(currentUser&&currentUser.balance>0?'Wallet Balance':'MFS');
 if(isG)loadGuildGroups();
 }
@@ -395,14 +507,15 @@ box.innerHTML=orders.map(o=>`<div class="order-item" style="margin-bottom:8px;">
 }
 
 async function submitOrder(){
-if(!selectedPackage)return alert("প্যাকেজ সিলেক্ট করুন!");
+const items=(catalog[currentCategory]||[]).map(p=>({name:p.name,qty:selectedQtyMap[p.name]||0})).filter(x=>x.qty>0);
+if(!items.length)return alert("কমপক্ষে ১টি প্যাকেজ সিলেক্ট করুন!");
 const uid=document.getElementById('uidInput').value.trim();
 if(isGloryCat(currentCategory)&&!guildVerified)return alert("আগে Verify বাটনে ক্লিক করে আপনার Guild ID ভেরিফাই করুন!");
 const ign=document.getElementById('ignInput').value.trim(),payMethod=selectedPayMode==='Wallet Balance'?'Wallet Balance':document.getElementById('payMethod').value;
 const trx=document.getElementById('trxInput').value.trim(),contact=currentUser?(currentUser.email||currentUser.phone||''):'Guest';
 if(!uid||(payMethod!=='Wallet Balance'&&!trx))return alert("দয়া করে সব প্রয়োজনীয় তথ্য পূরণ করুন!");
 const btn=document.getElementById('orderSubmitBtn');btn.disabled=true;
-try{const r=await fetch('/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:currentUser?currentUser.id:0,category:currentCategory,package_name:selectedPackage.name,uid,ign,region:selectedRegion,payment_method:payMethod,trx_id:payMethod==='Wallet Balance'?'WALLET':trx,phone:contact})});
+try{const r=await fetch('/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:currentUser?currentUser.id:0,category:currentCategory,package_name:items[0].name,items,uid,ign,region:selectedRegion,payment_method:payMethod,trx_id:payMethod==='Wallet Balance'?'WALLET':trx,phone:contact})});
 const d=await r.json();
 if(d.success){if(!currentUser&&d.order_id){const go=JSON.parse(localStorage.getItem('redteam_guest_orders')||'[]');go.unshift(d.order_id);localStorage.setItem('redteam_guest_orders',JSON.stringify(go.slice(0,30)))}
 alert(d.message);document.getElementById('trxInput').value='';refreshUser();refreshLiveStats();if(isGloryCat(currentCategory))loadGuildGroups();else switchTab('orders')}
@@ -524,6 +637,7 @@ let h=`<div class="form-card"><h3>🤖 Telegram অটো বাটন (One-Tap)
 <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="cfgNoticeEnabled" ${c.notice_enabled!==false?'checked':''} style="width:auto;margin:0;"> হোম পেজ পপআপ নোটিশ চালু রাখুন</label>
 <label>পপআপ টাইটেল</label><input type="text" id="cfgNoticeTitle" value="${esc(c.notice_title||'')}"><label>পপআপ মেসেজ</label><textarea id="cfgNoticeText" rows="2">${esc(c.notice_text||'')}</textarea>
 <label>WhatsApp নম্বর (880 সহ)</label><input type="text" id="cfgWhatsapp" value="${esc(c.whatsapp_number)}"><label>আজকের অর্ডার কাউন্ট বাড়াতে চাইলে (+ Offset দিন)</label><input type="number" id="cfgOffset" value="${c.today_count_offset||0}">
+<label>Google Client ID (One-Tap Login-এর জন্য)</label><input type="text" id="cfgGoogleClientId" value="${esc(c.google_client_id||'')}" placeholder="xxxxx.apps.googleusercontent.com">
 <label>OTP পাঠানোর Gmail (SMTP Email)</label><input type="email" id="cfgSmtpEmail" value="${esc(c.smtp_email||'')}" placeholder="yourshop@gmail.com">
 <label>Gmail App Password (১৬ অক্ষরের কোড)</label><input type="password" id="cfgSmtpPass" value="${esc(c.smtp_app_password||'')}" placeholder="xxxx xxxx xxxx xxxx">
 <label>পেমেন্ট নম্বরসমূহ:</label><div>${pms.map((m,i)=>`<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:5px;margin-bottom:6px;"><input type="text" value="${esc(m.name)}" onchange="adminConfigDraft.payment_methods[${i}].name=this.value" style="margin:0;padding:8px;"><input type="text" value="${esc(m.number)}" onchange="adminConfigDraft.payment_methods[${i}].number=this.value" style="margin:0;padding:8px;"><button onclick="adminConfigDraft.payment_methods.splice(${i},1);renderAdminSettings([])" style="background:#ef4444;color:#fff;border:none;padding:0 10px;border-radius:8px;">✕</button></div>`).join('')}</div>
@@ -543,10 +657,11 @@ adminConfigDraft.notice_title=document.getElementById('cfgNoticeTitle').value.tr
 adminConfigDraft.notice_text=document.getElementById('cfgNoticeText').value.trim();
 adminConfigDraft.whatsapp_number=document.getElementById('cfgWhatsapp').value.trim();
 adminConfigDraft.today_count_offset=parseInt(document.getElementById('cfgOffset').value||'0',10);
+adminConfigDraft.google_client_id=document.getElementById('cfgGoogleClientId').value.trim();
 adminConfigDraft.smtp_email=document.getElementById('cfgSmtpEmail').value.trim();
 adminConfigDraft.smtp_app_password=document.getElementById('cfgSmtpPass').value.trim();
 const r=await fetch('/api/admin/settings',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Password':adminPass},body:JSON.stringify({config:adminConfigDraft})});
-const d=await r.json();SHOP_CONFIG={...SHOP_CONFIG,...adminConfigDraft};initSettingsUI();refreshLiveStats();alert(d.message||"সেটিংস সেভ হয়েছে!");
+const d=await r.json();SHOP_CONFIG={...SHOP_CONFIG,...adminConfigDraft};googleInitedFor='';initSettingsUI();refreshLiveStats();alert(d.message||"সেটিংস সেভ হয়েছে!");
 }
 
 async function replyReport(id){
@@ -605,4 +720,4 @@ if(card)card.classList.add('hidden');
 }
 </script>
 </body>
-                                                                                                                                          </html>
+                                                                                                                                              </html>
