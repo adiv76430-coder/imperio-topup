@@ -5,6 +5,7 @@ import secrets
 import smtplib
 import sqlite3
 import urllib.request
+import urllib.parse
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, jsonify
@@ -81,6 +82,7 @@ def load_file_settings():
         "telegram_chat_id": "",
         "smtp_email": "",
         "smtp_app_password": "",
+        "google_client_id": "",
         "notice_enabled": True,
         "notice_title": "🔥 স্বাগতম RED TEAM SHOP-এ!",
         "notice_text": "২৪ ঘণ্টা দ্রুত ডেলিভারি। অর্ডার করার পর ১-৫ মিনিট অপেক্ষা করুন। যেকোনো সমস্যায় Support ট্যাব থেকে মেসেজ দিন।",
@@ -252,6 +254,7 @@ def get_public_config():
         "shop_name": cfg.get("shop_name", "RED TEAM SHOP"),
         "ticker_text": cfg.get("ticker_text", "Topup in seconds - Available 24/7!"),
         "whatsapp_number": cfg.get("whatsapp_number", ""),
+        "google_client_id": (os.environ.get("GOOGLE_CLIENT_ID") or cfg.get("google_client_id") or "").strip(),
         "notice_enabled": bool(cfg.get("notice_enabled", True)),
         "notice_title": cfg.get("notice_title", "🔥 স্বাগতম RED TEAM SHOP-এ!"),
         "notice_text": cfg.get("notice_text", ""),
@@ -498,6 +501,59 @@ def login():
             "created_at": row['created_at']
         }
         return jsonify({"success": True, "user": user})
+    finally:
+        conn.close()
+
+@app.route('/api/auth/google', methods=['POST'])
+def google_auth():
+    init_db()
+    data = request.json or {}
+    credential = str(data.get('credential', '')).strip()
+    if not credential:
+        return jsonify({"success": False, "message": "Google token পাওয়া যায়নি!"}), 400
+
+    cfg = get_config()
+    expected_client_id = (os.environ.get("GOOGLE_CLIENT_ID") or cfg.get("google_client_id") or "").strip()
+    if not expected_client_id:
+        return jsonify({"success": False, "message": "Admin Settings-এ Google Client ID সেট করা নেই!"}), 400
+
+    try:
+        url = f"https://oauth2.googleapis.com/tokeninfo?id_token={urllib.parse.quote(credential)}"
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            info = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return jsonify({"success": False, "message": "Google অ্যাকাউন্ট যাচাই করা যায়নি!"}), 401
+
+    if info.get("aud") != expected_client_id:
+        return jsonify({"success": False, "message": "Google Client ID মিলছে না!"}), 401
+    if str(info.get("email_verified", "")).lower() != "true":
+        return jsonify({"success": False, "message": "এই Gmail-টি ভেরিফাইড নয়!"}), 401
+
+    email = str(info.get("email", "")).strip().lower()
+    g_name = str(info.get("name", "")).strip() or email.split("@")[0]
+    if not email:
+        return jsonify({"success": False, "message": "Gmail পাওয়া যায়নি!"}), 400
+
+    conn, db_type = get_connection()
+    try:
+        c = conn.cursor()
+        p = "%s" if db_type == "postgres" else "?"
+        c.execute(f"SELECT id, name, phone, email, balance, created_at FROM users WHERE LOWER(email) = {p}", (email,))
+        row = c.fetchone()
+        if row:
+            return jsonify({"success": True, "user": dict(row), "is_new": False})
+
+        random_pw = generate_password_hash(secrets.token_urlsafe(24))
+        now = bd_now().strftime("%Y-%m-%d %I:%M %p")
+        c.execute(
+            f"INSERT INTO users (name, phone, email, password, balance, created_at) VALUES ({p}, NULL, {p}, {p}, 0, {p})",
+            (g_name, email, random_pw, now)
+        )
+        conn.commit()
+        c.execute(f"SELECT id, name, phone, email, balance, created_at FROM users WHERE LOWER(email) = {p}", (email,))
+        user = dict(c.fetchone())
+        return jsonify({"success": True, "user": user, "is_new": True})
     finally:
         conn.close()
 
@@ -752,10 +808,43 @@ def create_order():
         return jsonify({"success": False, "message": "দয়া করে Player UID / Guild ID দিন!"}), 400
 
     catalog = get_catalog()
-    matched_pkg = next((pkg for pkg in catalog.get(category, []) if pkg['name'] == package_name), None)
-    if not matched_pkg:
-        return jsonify({"success": False, "message": "সঠিক প্যাকেজ সিলেক্ট করুন!"}), 400
-    price = int(matched_pkg['price'])
+    cat_items = catalog.get(category, [])
+    cat_map = {pkg['name']: pkg for pkg in cat_items}
+
+    raw_items = data.get('items')
+    selected_lines = []
+    total_price = 0
+
+    if isinstance(raw_items, list) and len(raw_items) > 0:
+        merged = {}
+        for it in raw_items:
+            if not isinstance(it, dict):
+                continue
+            pname = str(it.get('name', '')).strip()
+            try:
+                qty = int(it.get('qty', 0))
+            except (ValueError, TypeError):
+                qty = 0
+            if pname not in cat_map or qty <= 0:
+                continue
+            merged[pname] = merged.get(pname, 0) + qty
+            if merged[pname] > 100:
+                return jsonify({"success": False, "message": "একবারে সর্বোচ্চ ১০০টি পর্যন্ত নেওয়া যাবে!"}), 400
+        for pname, qty in merged.items():
+            pkg = cat_map[pname]
+            total_price += int(pkg['price']) * qty
+            selected_lines.append(f"{pname} x{qty}" if qty > 1 or len(merged) > 1 else pname)
+    else:
+        matched_pkg = cat_map.get(package_name)
+        if matched_pkg:
+            total_price = int(matched_pkg['price'])
+            selected_lines.append(package_name)
+
+    if not selected_lines or total_price <= 0:
+        return jsonify({"success": False, "message": "সঠিক প্যাকেজ ও পরিমাণ সিলেক্ট করুন!"}), 400
+
+    package_name = ", ".join(selected_lines)
+    price = total_price
 
     if pay_method != "Wallet Balance" and (len(trx_id) < 4 or trx_id.upper() == 'WALLET'):
         return jsonify({"success": False, "message": "সঠিক Transaction ID (TrxID) দিন!"}), 400
